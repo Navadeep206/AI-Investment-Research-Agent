@@ -6,6 +6,7 @@ import companyRoutes from './routes/companyRoutes.js';
 import researchRoutes from './routes/researchRoutes.js';
 import scoringRoutes from './routes/scoringRoutes.js';
 import challengeRoutes from './routes/challengeRoutes.js';
+import analysisRoutes from './routes/analysisRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -28,6 +29,7 @@ app.use('/api', companyRoutes);
 app.use('/api', researchRoutes);
 app.use('/api', scoringRoutes);
 app.use('/api', challengeRoutes);
+app.use('/api', analysisRoutes);
 
 // Global Error Handler
 app.use((err, req, res, next) => {
