@@ -279,11 +279,6 @@ class CacheService {
     return await analysisService.getAnalysisById(fresh.analysisId);
   }
 
-  /**
-   * Compiles aggregate statistics regarding cache status.
-   * 
-   * @returns {Promise<Object>} Cache stats mapping
-   */
   async getCacheStats() {
     try {
       const totalAnalyses = await prisma.analysis.count();
@@ -300,24 +295,27 @@ class CacheService {
       });
 
       const staleAnalyses = totalAnalyses - freshAnalyses;
-      const cacheHitRate = totalAnalyses > 0 
-        ? parseFloat(((freshAnalyses / totalAnalyses) * 100).toFixed(2))
-        : 0;
+
+      const totalRequests = this.cacheHits + this.cacheMisses + this.cacheRepairs;
+      const hitRatio = totalRequests > 0 ? (this.cacheHits / totalRequests) : 0;
+      const cacheHitRate = `${parseFloat((hitRatio * 100).toFixed(2))}%`;
 
       return {
         totalAnalyses,
         freshAnalyses,
         staleAnalyses,
-        cacheHitRate: `${cacheHitRate}%`,
+        totalRequests,
         cacheHits: this.cacheHits,
         cacheMisses: this.cacheMisses,
-        cacheRepairs: this.cacheRepairs
+        cacheRepairs: this.cacheRepairs,
+        cacheHitRate
       };
     } catch (error) {
       console.error("[Cache Service] Failed to retrieve cache stats:", error.message);
       throw error;
     }
   }
+
 
 }
 
