@@ -12,6 +12,12 @@ const GraphState = Annotation.Root({
   companyData: Annotation({
     reducer: (x, y) => y ?? x,
   }),
+  evidence: Annotation({
+    reducer: (x, y) => y ?? x,
+  }),
+  evidenceMetrics: Annotation({
+    reducer: (x, y) => y ?? x,
+  }),
   research: Annotation({
     reducer: (x, y) => y ?? x,
   }),
@@ -32,7 +38,7 @@ const researchNode = async (state) => {
   if (!state.companyData) {
     throw new Error("Missing companyData in graph state");
   }
-  const report = await runResearchAgent(state.companyData);
+  const report = await runResearchAgent(state.companyData, state.evidence);
   return { research: report };
 };
 
@@ -59,7 +65,14 @@ const committeeNode = async (state) => {
   if (!state.research || !state.scorecard || !state.challenge) {
     throw new Error("Missing research, scorecard, or challenge report in graph state");
   }
-  const finalDecision = await runCommitteeAgent(state.research, state.scorecard, state.challenge);
+  const sourcesUsed = state.evidence ? state.evidence.length : 0;
+  const finalDecision = await runCommitteeAgent(
+    state.research,
+    state.scorecard,
+    state.challenge,
+    sourcesUsed,
+    state.evidenceMetrics
+  );
   return { finalDecision };
 };
 

@@ -25,7 +25,7 @@ const cleanResponseText = (text) => {
  * @param {Object} challenge Challenge output from Devil's Advocate Agent
  * @returns {Promise<Object>} Validated committee final decision
  */
-export const runCommitteeAgent = async (research, scorecard, challenge) => {
+export const runCommitteeAgent = async (research, scorecard, challenge, sourcesUsed = 0, evidenceMetrics = null) => {
   const modelName = "gemini-2.5-flash";
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
@@ -40,7 +40,7 @@ export const runCommitteeAgent = async (research, scorecard, challenge) => {
     temperature: 0.1,
   });
 
-  const prompt = getCommitteePrompt(research, scorecard, challenge);
+  const prompt = getCommitteePrompt(research, scorecard, challenge, sourcesUsed, evidenceMetrics);
   let responseText = "";
 
   try {
@@ -51,6 +51,16 @@ export const runCommitteeAgent = async (research, scorecard, challenge) => {
     // Parse and validate response
     const cleanedText = cleanResponseText(responseText);
     const parsedData = JSON.parse(cleanedText);
+
+    // Enforce Capping Constraint programmatically as a backup check
+    if (evidenceMetrics && evidenceMetrics.evidenceQualityScore < 70) {
+      if (parsedData.recommendation === 'INVEST') {
+        console.warn(`[Committee Agent] Overriding recommendation from INVEST to WATCH because evidenceQualityScore (${evidenceMetrics.evidenceQualityScore}) < 70.`);
+        parsedData.recommendation = 'WATCH';
+        parsedData.decisionOverrideReason = `Recommendation programmatically capped at WATCH because evidence quality score (${evidenceMetrics.evidenceQualityScore}) is below 70.`;
+      }
+    }
+
     const validatedData = committeeSchema.parse(parsedData);
 
     console.log(`[Committee Agent] Final decision compiled successfully on first attempt.`);
@@ -92,7 +102,9 @@ export const committeeAgent = async (state) => {
     const decision = await runCommitteeAgent(
       state.research,
       state.scorecard,
-      state.challenge
+      state.challenge,
+      state.evidence ? state.evidence.length : 0,
+      state.evidenceMetrics || null
     );
     return {
       finalDecision: decision

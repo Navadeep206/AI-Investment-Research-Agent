@@ -1,6 +1,7 @@
 import companyResearchService from '../services/companyResearchService.js';
 import { runResearchAgent } from '../agents/researchAgent.js';
 import { runScoringAgent } from '../agents/scoringAgent.js';
+import evidenceService from '../services/evidenceService.js';
 
 /**
  * Coordinates company research followed by automated scorecard grading.
@@ -21,10 +22,19 @@ export const createInvestmentScore = async (req, res, next) => {
     const companyQueryName = company.trim();
     console.log(`[Scoring Controller] Commencing valuation grading for "${companyQueryName}"...`);
 
-    // Step 1: Query company overview profile
+    // Step 1: Query company overview profile and search evidence in parallel
     let companyData;
+    let evidence = [];
     try {
-      companyData = await companyResearchService.getCompanyResearch(companyQueryName);
+      const [researchData, evidenceData] = await Promise.all([
+        companyResearchService.getCompanyResearch(companyQueryName),
+        evidenceService.collectEvidence(companyQueryName).catch(err => {
+          console.warn(`[Scoring Controller] Evidence collection failed: ${err.message}`);
+          return [];
+        })
+      ]);
+      companyData = researchData;
+      evidence = evidenceData;
     } catch (serviceErr) {
       console.error(`[Scoring Controller] Company research service error: ${serviceErr.message}`);
       return res.status(404).json({
@@ -37,7 +47,7 @@ export const createInvestmentScore = async (req, res, next) => {
     let researchReport;
     try {
       console.log(`[Scoring Controller] Running Research Analyst Agent for "${companyData.company}"...`);
-      researchReport = await runResearchAgent(companyData);
+      researchReport = await runResearchAgent(companyData, evidence);
     } catch (researchErr) {
       console.error(`[Scoring Controller] Research Agent failed: ${researchErr.message}`);
       return res.status(502).json({

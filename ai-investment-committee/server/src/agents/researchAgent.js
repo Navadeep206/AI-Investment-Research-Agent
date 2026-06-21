@@ -23,7 +23,7 @@ const cleanResponseText = (text) => {
  * @param {Object} companyData Combined profile from Wikipedia + Yahoo Finance
  * @returns {Promise<Object>} Validated investment report
  */
-export const runResearchAgent = async (companyData) => {
+export const runResearchAgent = async (companyData, evidence) => {
   const modelName = "gemini-2.5-flash";
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
@@ -38,7 +38,7 @@ export const runResearchAgent = async (companyData) => {
     temperature: 0.1,
   });
 
-  const prompt = getResearchPrompt(companyData);
+  const prompt = getResearchPrompt(companyData, evidence);
   let responseText = "";
 
   try {
@@ -87,7 +87,7 @@ Please fix this response. Return ONLY a valid JSON string that matches the requi
 export const researchAgent = async (state) => {
   console.log("[Graph Node] Research Agent executing...");
   try {
-    const report = await runResearchAgent(state.companyData);
+    const report = await runResearchAgent(state.companyData, state.evidence);
     return {
       ...state,
       messages: [
