@@ -26,6 +26,25 @@ const cleanResponseText = (text) => {
  * @returns {Promise<Object>} Validated committee final decision
  */
 export const runCommitteeAgent = async (research, scorecard, challenge, sourcesUsed = 0, evidenceMetrics = null) => {
+  if (process.env.MOCK_LLM === 'true') {
+    console.log(`[Committee Agent] [MOCK MODE] Returning mock committee decision`);
+    return {
+      recommendation: "INVEST",
+      confidence: 85,
+      reasoning: "The committee voted to INVEST based on strong competitive positioning in server CPUs and AI hardware diversification.",
+      keyFactors: ["Strong x86 data center CPU share", "Rapid adoption of MI300X AI GPUs"],
+      sourcesUsed: sourcesUsed,
+      evidenceQualityScore: evidenceMetrics ? evidenceMetrics.evidenceQualityScore : 80,
+      tierBreakdown: {
+        tierA: evidenceMetrics ? (evidenceMetrics.tierBreakdown?.tierA || 0) : 0,
+        tierB: evidenceMetrics ? (evidenceMetrics.tierBreakdown?.tierB || 0) : 0,
+        tierC: evidenceMetrics ? (evidenceMetrics.tierBreakdown?.tierC || 0) : 0,
+        tierD: evidenceMetrics ? (evidenceMetrics.tierBreakdown?.tierD || 0) : 0
+      },
+      decisionOverrideReason: null
+    };
+  }
+
   const modelName = "gemini-2.5-flash";
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 

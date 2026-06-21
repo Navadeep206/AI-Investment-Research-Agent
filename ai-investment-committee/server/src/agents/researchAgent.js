@@ -24,6 +24,34 @@ const cleanResponseText = (text) => {
  * @returns {Promise<Object>} Validated investment report
  */
 export const runResearchAgent = async (companyData, evidence) => {
+  if (process.env.MOCK_LLM === 'true') {
+    console.log(`[Research Agent] [MOCK MODE] Returning mock research report for "${companyData.company || 'AMD'}"`);
+    return {
+      businessOverview: `${companyData.company || 'AMD'} is a global semiconductor company specializing in high-performance processors, graphics cards, and AI accelerators.`,
+      revenueDrivers: [
+        "Data Center CPU and GPU growth (Instinct MI300 series)",
+        "Ryzen processor demand in client PCs",
+        "Embedded and gaming console sales"
+      ],
+      competitiveAdvantages: [
+        "x86 architecture licensing",
+        "Chiplet design leadership",
+        "Strong partnership with TSMC"
+      ],
+      growthCatalysts: [
+        "Expansion of AI GPU roadmap (MI325X, MI350)",
+        "AI PC refresh cycle",
+        "Data center market share gains"
+      ],
+      risks: [
+        "Intense competition from NVIDIA and Intel",
+        "Cyclical nature of the semiconductor market",
+        "Geopolitical chip manufacturing concentration"
+      ],
+      bullCase: "AMD continues to capture market share from Intel in server CPUs and scales its AI GPUs."
+    };
+  }
+
   const modelName = "gemini-2.5-flash";
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 

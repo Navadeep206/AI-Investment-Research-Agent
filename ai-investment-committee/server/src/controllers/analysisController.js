@@ -3,6 +3,7 @@ import { investmentGraph } from '../graph/investmentGraph.js';
 import evidenceService from '../services/evidenceService.js';
 import sourceRankingService from '../services/sourceRankingService.js';
 import analysisService from '../services/analysisService.js';
+import cacheService from '../services/cacheService.js';
 
 /**
  * Executes the entire LangGraph investment workflow for a given company.
@@ -21,16 +22,19 @@ export const analyzeCompany = async (req, res, next) => {
     }
 
     const companyQueryName = company.trim();
-    console.log(`[Analysis Controller] Commencing full LangGraph workflow analysis for "${companyQueryName}"...`);
+    console.log(`[Analysis Controller] Commencing caching-aware workflow analysis for "${companyQueryName}"...`);
 
-    // Step 1: Query company profile, market metrics and search evidence in parallel
-    let companyData;
-    let evidence = [];
-    let evidenceMetrics = null;
-    try {
+    // Callback workflow function to invoke if there is a cache miss or stale cache
+    const executeWorkflow = async (resolvedName) => {
+      const nameToQuery = resolvedName || companyQueryName;
+      // Step 1: Query company profile, market metrics and search evidence in parallel
+      let companyData;
+      let evidence = [];
+      let evidenceMetrics = null;
+      
       const [researchData, evidenceData] = await Promise.all([
-        companyResearchService.getCompanyResearch(companyQueryName),
-        evidenceService.collectEvidence(companyQueryName).catch(err => {
+        companyResearchService.getCompanyResearch(nameToQuery),
+        evidenceService.collectEvidence(nameToQuery).catch(err => {
           console.warn(`[Analysis Controller] Evidence collection failed: ${err.message}`);
           return [];
         })
@@ -40,16 +44,8 @@ export const analyzeCompany = async (req, res, next) => {
       companyData = researchData;
       evidence = rankedEvidence;
       evidenceMetrics = metrics;
-    } catch (serviceErr) {
-      console.error(`[Analysis Controller] Company lookup failed: ${serviceErr.message}`);
-      return res.status(404).json({
-        success: false,
-        message: `Could not retrieve company profile or market metrics for "${companyQueryName}": ${serviceErr.message}`
-      });
-    }
 
-    // Step 2: Run the LangGraph StateGraph workflow
-    try {
+      // Step 2: Run the LangGraph StateGraph workflow
       console.log(`[Analysis Controller] Invoking LangGraph workflow for "${companyData.company}"...`);
       const result = await investmentGraph.invoke({
         company: companyData.company,
@@ -58,46 +54,48 @@ export const analyzeCompany = async (req, res, next) => {
         evidenceMetrics: evidenceMetrics
       });
 
-      // Step 3: Automatically save the analysis to the database
-      let analysisId = null;
-      try {
-        const saved = await analysisService.saveAnalysis({
-          company: companyData.company,
-          industry: companyData.industry,
-          marketCap: companyData.marketCap,
-          overallScore: result.scorecard ? result.scorecard.overallScore : null,
-          recommendation: result.finalDecision ? result.finalDecision.recommendation : null,
-          confidence: result.finalDecision ? result.finalDecision.confidence : null,
-          sourcesUsed: evidence ? evidence.length : 0,
-          evidenceQualityScore: evidenceMetrics ? evidenceMetrics.evidenceQualityScore : 0,
-          research: result.research,
-          scorecard: result.scorecard,
-          challenge: result.challenge,
-          finalDecision: result.finalDecision
-        });
-        analysisId = saved.id;
-      } catch (dbErr) {
-        console.error(`[Analysis Controller] Failed to persist analysis to database:`, dbErr.message);
-      }
+      // Step 3: Persist analysis to database
+      const saved = await analysisService.saveAnalysis({
+        company: companyData.company,
+        industry: companyData.industry,
+        marketCap: companyData.marketCap,
+        overallScore: result.scorecard ? result.scorecard.overallScore : null,
+        recommendation: result.finalDecision ? result.finalDecision.recommendation : null,
+        confidence: result.finalDecision ? result.finalDecision.confidence : null,
+        sourcesUsed: evidence ? evidence.length : 0,
+        evidenceQualityScore: evidenceMetrics ? evidenceMetrics.evidenceQualityScore : 0,
+        research: result.research,
+        scorecard: result.scorecard,
+        challenge: result.challenge,
+        finalDecision: result.finalDecision
+      });
 
-      // Step 4: Return consolidated final analysis response
-      return res.status(200).json({
-        success: true,
-        analysisId: analysisId,
+      return {
+        analysisId: saved.id,
+        company: companyData.company,
+        createdAt: saved.createdAt,
         analysis: {
           research: result.research,
           scorecard: result.scorecard,
           challenge: result.challenge,
           finalDecision: result.finalDecision
         }
-      });
-    } catch (graphErr) {
-      console.error(`[Analysis Controller] LangGraph execution failed:`, graphErr.stack);
-      return res.status(502).json({
-        success: false,
-        error: 'LangGraph workflow execution failed'
-      });
-    }
+      };
+    };
+
+    // Run cache service wrapper coordinator
+    const result = await cacheService.getOrRefreshAnalysis(companyQueryName, executeWorkflow);
+
+    // Return cached or fresh analysis response matching spec
+    return res.status(200).json({
+      success: true,
+      analysisId: result.analysisId,
+      company: result.company,
+      dataSource: result.dataSource,
+      generatedAt: result.generatedAt,
+      ageHours: result.ageHours,
+      analysis: result.analysis
+    });
   } catch (error) {
     console.error('[Analysis Controller] Unexpected error:', error.stack);
     next(error);

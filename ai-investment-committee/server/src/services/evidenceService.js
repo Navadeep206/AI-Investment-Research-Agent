@@ -27,6 +27,31 @@ class EvidenceService {
     }
 
     const companyName = company.trim();
+
+    if (process.env.MOCK_LLM === 'true') {
+      console.log(`[Evidence Service] [MOCK MODE] Returning mock evidence list for "${companyName}"`);
+      return [
+        {
+          claim: `${companyName} launches new high-performance AI chip with upgraded hardware architecture.`,
+          source: "Bloomberg",
+          url: "https://www.bloomberg.com/news/articles/amd-ai-accelerator-mi325x",
+          confidence: 90
+        },
+        {
+          claim: `${companyName} EPYC processor line gains server market share.`,
+          source: "Reuters",
+          url: "https://www.reuters.com/technology/amd-epyc-market-share",
+          confidence: 88
+        },
+        {
+          claim: "Industry reports indicate growing developer interest in alternative software tools.",
+          source: "CNBC",
+          url: "https://www.cnbc.com/news/amd-vs-nvidia-ai-software",
+          confidence: 85
+        }
+      ];
+    }
+
     const tavilyKey = process.env.TAVILY_API_KEY;
     const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 

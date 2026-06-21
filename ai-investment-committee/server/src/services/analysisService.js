@@ -86,6 +86,33 @@ class AnalysisService {
       throw error;
     }
   }
+
+  /**
+   * Retrieves the newest completed analysis matching the company name case-insensitively.
+   * 
+   * @param {string} company The name of the company or ticker
+   * @returns {Promise<Object|null>} The newest database record or null
+   */
+  async getLatestAnalysisByCompany(company) {
+    try {
+      const companyName = (company || "").trim();
+      console.log(`[Analysis Service] Querying latest analysis record for: "${companyName}"`);
+      return await prisma.analysis.findFirst({
+        where: {
+          company: {
+            equals: companyName,
+            mode: 'insensitive'
+          }
+        },
+        orderBy: {
+          createdAt: 'desc'
+        }
+      });
+    } catch (error) {
+      console.error(`[Analysis Service] Error querying latest analysis for "${company}":`, error.message);
+      throw error;
+    }
+  }
 }
 
 export default new AnalysisService();

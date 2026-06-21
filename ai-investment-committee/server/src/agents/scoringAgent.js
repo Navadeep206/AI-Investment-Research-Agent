@@ -25,6 +25,20 @@ const cleanResponseText = (text) => {
  * @returns {Promise<Object>} Validated investment scorecard
  */
 export const runScoringAgent = async (companyName, researchReport) => {
+  if (process.env.MOCK_LLM === 'true') {
+    console.log(`[Scoring Agent] [MOCK MODE] Returning mock scorecard for "${companyName}"`);
+    return {
+      businessQuality: 85,
+      growthPotential: 88,
+      competitiveMoat: 80,
+      financialStrength: 82,
+      riskLevel: 75,
+      overallScore: 82,
+      confidence: 85,
+      recommendation: "INVEST"
+    };
+  }
+
   const modelName = "gemini-2.5-flash";
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 

@@ -26,6 +26,24 @@ const cleanResponseText = (text) => {
  * @returns {Promise<Object>} Validated bear scorecard challenge
  */
 export const runDevilAdvocateAgent = async (companyName, researchReport, scorecard) => {
+  if (process.env.MOCK_LLM === 'true') {
+    console.log(`[Devil's Advocate] [MOCK MODE] Returning mock challenge for "${companyName}"`);
+    return {
+      bearCase: "AMD is a distant second to NVIDIA in AI compute, and margins may be pressured by TSMC wafer pricing.",
+      keyConcerns: [
+        "NVIDIA CUDA software moat is highly sticky",
+        "Intel's foundry roadmap could regain process parity"
+      ],
+      hiddenRisks: [
+        "Taiwan geopolitical risk affecting single-source TSMC supply"
+      ],
+      worstCaseScenario: "NVIDIA pricing aggressiveness squeezes AMD AI GPU gross margins to under 40%.",
+      counterArguments: [
+        "Cloud providers desperately want a second source to avoid NVIDIA monopoly pricing"
+      ]
+    };
+  }
+
   const modelName = "gemini-2.5-flash";
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
