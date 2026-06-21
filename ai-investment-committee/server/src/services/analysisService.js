@@ -113,6 +113,75 @@ class AnalysisService {
       throw error;
     }
   }
+
+  /**
+   * Generates a fresh analysis by orchestrating Wikipedia/Yahoo research, Tavily evidence searches,
+   * source ranking, the multi-agent LangGraph workflow execution, and persisting the resulting reports.
+   * 
+   * @param {string} companyQueryName The target company name
+   * @returns {Promise<Object>} Formatted object matching executeWorkflow expectations
+   */
+  async runFullAnalysisAndSave(companyQueryName) {
+    const { default: companyResearchService } = await import('./companyResearchService.js');
+    const { investmentGraph } = await import('../graph/investmentGraph.js');
+    const { default: evidenceService } = await import('./evidenceService.js');
+    const { default: sourceRankingService } = await import('./sourceRankingService.js');
+
+    // Step 1: Query company profile, market metrics and search evidence in parallel
+    let companyData;
+    let evidence = [];
+    let evidenceMetrics = null;
+    
+    const [researchData, evidenceData] = await Promise.all([
+      companyResearchService.getCompanyResearch(companyQueryName),
+      evidenceService.collectEvidence(companyQueryName).catch(err => {
+        console.warn(`[Analysis Service] Evidence collection failed: ${err.message}`);
+        return [];
+      })
+    ]);
+    
+    const { rankedEvidence, metrics } = sourceRankingService.rankEvidence(evidenceData);
+    companyData = researchData;
+    evidence = rankedEvidence;
+    evidenceMetrics = metrics;
+
+    // Step 2: Run the LangGraph StateGraph workflow
+    console.log(`[Analysis Service] Invoking LangGraph workflow for "${companyData.company}"...`);
+    const result = await investmentGraph.invoke({
+      company: companyData.company,
+      companyData: companyData,
+      evidence: evidence,
+      evidenceMetrics: evidenceMetrics
+    });
+
+    // Step 3: Persist analysis to database
+    const saved = await this.saveAnalysis({
+      company: companyData.company,
+      industry: companyData.industry,
+      marketCap: companyData.marketCap,
+      overallScore: result.scorecard ? result.scorecard.overallScore : null,
+      recommendation: result.finalDecision ? result.finalDecision.recommendation : null,
+      confidence: result.finalDecision ? result.finalDecision.confidence : null,
+      sourcesUsed: evidence ? evidence.length : 0,
+      evidenceQualityScore: evidenceMetrics ? evidenceMetrics.evidenceQualityScore : 0,
+      research: result.research,
+      scorecard: result.scorecard,
+      challenge: result.challenge,
+      finalDecision: result.finalDecision
+    });
+
+    return {
+      analysisId: saved.id,
+      company: companyData.company,
+      createdAt: saved.createdAt,
+      analysis: {
+        research: result.research,
+        scorecard: result.scorecard,
+        challenge: result.challenge,
+        finalDecision: result.finalDecision
+      }
+    };
+  }
 }
 
 export default new AnalysisService();

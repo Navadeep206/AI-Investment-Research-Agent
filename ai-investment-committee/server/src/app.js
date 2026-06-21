@@ -10,6 +10,7 @@ import analysisRoutes from './routes/analysisRoutes.js';
 import evidenceRoutes from './routes/evidenceRoutes.js';
 import historyRoutes from './routes/historyRoutes.js';
 import cacheRoutes from './routes/cacheRoutes.js';
+import comparisonRoutes from './routes/comparisonRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -36,6 +37,7 @@ app.use('/api', analysisRoutes);
 app.use('/api', evidenceRoutes);
 app.use('/api', historyRoutes);
 app.use('/api', cacheRoutes);
+app.use('/api', comparisonRoutes);
 
 // Global Error Handler
 app.use((err, req, res, next) => {
