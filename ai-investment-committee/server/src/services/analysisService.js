@@ -1,6 +1,39 @@
 import prisma from '../config/prisma.js';
+import freshnessService from './freshnessService.js';
 
 class AnalysisService {
+  /**
+   * Helper to format database record, dynamically calculating freshness variables.
+   */
+  formatAnalysisRecord(record) {
+    if (!record) return null;
+    const freshness = freshnessService.calculateFreshness(record.createdAt);
+    
+    const dataQualityScore = record.finalDecision?.dataQualityScore !== undefined
+      ? record.finalDecision.dataQualityScore
+      : 100;
+      
+    const recommendationReasonCodes = record.finalDecision?.recommendationReasonCodes || [];
+
+    const updatedFinalDecision = {
+      ...(record.finalDecision || {}),
+      evidenceAgeMinutes: freshness.evidenceAgeMinutes,
+      freshnessScore: freshness.freshnessScore,
+      freshnessStatus: freshness.status,
+      dataQualityScore,
+      recommendationReasonCodes
+    };
+
+    return {
+      ...record,
+      evidenceAgeMinutes: freshness.evidenceAgeMinutes,
+      freshnessScore: freshness.freshnessScore,
+      freshnessStatus: freshness.status,
+      dataQualityScore,
+      recommendationReasonCodes,
+      finalDecision: updatedFinalDecision
+    };
+  }
   /**
    * Persists a completed investment committee analysis.
    * 
@@ -23,7 +56,12 @@ class AnalysisService {
           research: data.research,
           scorecard: data.scorecard,
           challenge: data.challenge,
-          finalDecision: data.finalDecision
+          finalDecision: data.finalDecision,
+          requestId: data.requestId,
+          confidenceBreakdown: data.confidenceBreakdown,
+          agentMetrics: data.agentMetrics,
+          materialEventCount: data.materialEventCount,
+          lastMaterialEventAt: data.lastMaterialEventAt ? new Date(data.lastMaterialEventAt) : null
         }
       });
     } catch (error) {
@@ -40,11 +78,12 @@ class AnalysisService {
   async getAnalysisHistory() {
     try {
       console.log("[Analysis Service] Fetching analysis history records...");
-      return await prisma.analysis.findMany({
+      const history = await prisma.analysis.findMany({
         orderBy: {
           createdAt: 'desc'
         }
       });
+      return history.map(h => this.formatAnalysisRecord(h));
     } catch (error) {
       console.error("[Analysis Service] Error querying analysis history:", error.message);
       throw error;
@@ -60,9 +99,10 @@ class AnalysisService {
   async getAnalysisById(id) {
     try {
       console.log(`[Analysis Service] Querying analysis by ID: "${id}"`);
-      return await prisma.analysis.findUnique({
+      const record = await prisma.analysis.findUnique({
         where: { id }
       });
+      return this.formatAnalysisRecord(record);
     } catch (error) {
       console.error(`[Analysis Service] Error querying ID "${id}":`, error.message);
       throw error;
@@ -97,7 +137,7 @@ class AnalysisService {
     try {
       const companyName = (company || "").trim();
       console.log(`[Analysis Service] Querying latest analysis record for: "${companyName}"`);
-      return await prisma.analysis.findFirst({
+      const record = await prisma.analysis.findFirst({
         where: {
           company: {
             equals: companyName,
@@ -108,6 +148,7 @@ class AnalysisService {
           createdAt: 'desc'
         }
       });
+      return this.formatAnalysisRecord(record);
     } catch (error) {
       console.error(`[Analysis Service] Error querying latest analysis for "${company}":`, error.message);
       throw error;
@@ -121,7 +162,7 @@ class AnalysisService {
    * @param {string} companyQueryName The target company name
    * @returns {Promise<Object>} Formatted object matching executeWorkflow expectations
    */
-  async runFullAnalysisAndSave(companyQueryName) {
+  async runFullAnalysisAndSave(companyQueryName, preFetchedCompanyData = null, sessionId = null, requestId = null, eventMetricsData = null) {
     const { default: companyResearchService } = await import('./companyResearchService.js');
     const { investmentGraph } = await import('../graph/investmentGraph.js');
     const { default: evidenceService } = await import('./evidenceService.js');
@@ -132,8 +173,12 @@ class AnalysisService {
     let evidence = [];
     let evidenceMetrics = null;
     
+    const researchPromise = preFetchedCompanyData
+      ? Promise.resolve(preFetchedCompanyData)
+      : companyResearchService.getCompanyResearch(companyQueryName);
+
     const [researchData, evidenceData] = await Promise.all([
-      companyResearchService.getCompanyResearch(companyQueryName),
+      researchPromise,
       evidenceService.collectEvidence(companyQueryName).catch(err => {
         console.warn(`[Analysis Service] Evidence collection failed: ${err.message}`);
         return [];
@@ -147,14 +192,30 @@ class AnalysisService {
 
     // Step 2: Run the LangGraph StateGraph workflow
     console.log(`[Analysis Service] Invoking LangGraph workflow for "${companyData.company}"...`);
+    if (sessionId) {
+      const { default: executionTracker } = await import('./executionTracker.js');
+      executionTracker.initializeSession(sessionId);
+    }
     const result = await investmentGraph.invoke({
       company: companyData.company,
       companyData: companyData,
       evidence: evidence,
-      evidenceMetrics: evidenceMetrics
+      evidenceMetrics: evidenceMetrics,
+      sessionId: sessionId,
+      requestId: requestId
     });
 
     // Step 3: Persist analysis to database
+    const finalDecisionToSave = result.finalDecision ? {
+      ...result.finalDecision,
+      materialEvents: eventMetricsData ? eventMetricsData.events : []
+    } : null;
+
+    const researchToSave = result.research ? {
+      ...result.research,
+      evidence: evidence || []
+    } : null;
+
     const saved = await this.saveAnalysis({
       company: companyData.company,
       industry: companyData.industry,
@@ -164,10 +225,15 @@ class AnalysisService {
       confidence: result.finalDecision ? result.finalDecision.confidence : null,
       sourcesUsed: evidence ? evidence.length : 0,
       evidenceQualityScore: evidenceMetrics ? evidenceMetrics.evidenceQualityScore : 0,
-      research: result.research,
+      research: researchToSave,
       scorecard: result.scorecard,
       challenge: result.challenge,
-      finalDecision: result.finalDecision
+      finalDecision: finalDecisionToSave,
+      requestId: requestId,
+      confidenceBreakdown: result.finalDecision ? result.finalDecision.confidenceBreakdown : null,
+      agentMetrics: result.agentMetrics || null,
+      materialEventCount: eventMetricsData ? eventMetricsData.eventCount : 0,
+      lastMaterialEventAt: eventMetricsData ? eventMetricsData.latestEventTimestamp : null
     });
 
     return {

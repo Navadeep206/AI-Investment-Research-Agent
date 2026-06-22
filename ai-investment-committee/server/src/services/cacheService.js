@@ -1,12 +1,31 @@
 import analysisService from './analysisService.js';
 import prisma from '../config/prisma.js';
+import freshnessService from './freshnessService.js';
 import { MAX_ANALYSIS_AGE_HOURS, MIN_DATA_QUALITY } from '../config/cacheConfig.js';
+import executionTracker from './executionTracker.js';
+import materialEventService from './materialEventService.js';
 
 class CacheService {
   constructor() {
     this.cacheHits = 0;
     this.cacheMisses = 0;
     this.cacheRepairs = 0;
+  }
+
+  /**
+   * Automatically initializes and completes all agent progress status states in cache hit cases.
+   */
+  recordCacheHitExecution(sessionId) {
+    if (!sessionId) return;
+    executionTracker.initializeSession(sessionId);
+    executionTracker.startAgent(sessionId, "Research Agent");
+    executionTracker.completeAgent(sessionId, "Research Agent", "Retrieved report from PostgreSQL cache.");
+    executionTracker.startAgent(sessionId, "Scoring Agent");
+    executionTracker.completeAgent(sessionId, "Scoring Agent", "Retrieved scorecard from PostgreSQL cache.");
+    executionTracker.startAgent(sessionId, "Devil Advocate Agent");
+    executionTracker.completeAgent(sessionId, "Devil Advocate Agent", "Retrieved challenge from PostgreSQL cache.");
+    executionTracker.startAgent(sessionId, "Committee Agent");
+    executionTracker.completeAgent(sessionId, "Committee Agent", "Retrieved final decision from PostgreSQL cache.");
   }
 
   /**
@@ -93,29 +112,61 @@ class CacheService {
    * @param {Function} executeWorkflow Async callback to generate fresh analysis and save it
    * @returns {Promise<Object>} Formatted response object containing cache metadata
    */
-  async getOrRefreshAnalysis(company, executeWorkflow) {
+  async getOrRefreshAnalysis(company, executeWorkflow, sessionId = null) {
     let latest = await this.getLatestAnalysis(company);
     let matchedCompany = company;
     let hasRecord = false;
-    let isStale = false;
     let isIncomplete = false;
 
     if (latest) {
       hasRecord = true;
-      const ageHours = this.calculateAgeHours(latest.createdAt);
-      const isFresh = this.isAnalysisFresh(latest.createdAt);
-      const isComplete = this.isAnalysisComplete(latest);
 
-      if (isFresh && isComplete) {
-        console.log(`[Cache Service] Cache HIT for "${company}". Age: ${ageHours} hours.`);
+      // 1. Detect material events
+      const eventCheck = await materialEventService.detectMaterialEvents(company, latest.createdAt);
+      if (eventCheck.hasMaterialEvent) {
+        console.log(`[Cache Service] Material event detected for "${company}" since ${latest.createdAt}. Triggering EVENT_REFRESH.`);
+        const fresh = await executeWorkflow(company, null, eventCheck);
+        const formattedFresh = await analysisService.getAnalysisById(fresh.analysisId);
+        this.cacheMisses++;
+        return {
+          analysisId: fresh.analysisId,
+          company: fresh.company,
+          dataSource: "EVENT_REFRESH",
+          cacheReason: "material_event_detected",
+          generatedAt: fresh.createdAt || new Date(),
+          ageHours: 0,
+          freshnessScore: formattedFresh.freshnessScore,
+          evidenceAgeMinutes: formattedFresh.evidenceAgeMinutes,
+          evidenceQualityScore: formattedFresh.evidenceQualityScore,
+          dataQualityScore: formattedFresh.dataQualityScore,
+          recommendationReasonCodes: formattedFresh.recommendationReasonCodes,
+          analysis: {
+            research: formattedFresh.research,
+            scorecard: formattedFresh.scorecard,
+            challenge: formattedFresh.challenge,
+            finalDecision: formattedFresh.finalDecision
+          }
+        };
+      }
+
+      // 2. No material events. Check if cache is complete
+      const isComplete = this.isAnalysisComplete(latest);
+      if (isComplete) {
+        console.log(`[Cache Service] Cache HIT for "${company}". No material events detected.`);
         this.cacheHits++;
+        this.recordCacheHitExecution(sessionId);
         return {
           analysisId: latest.id,
           company: latest.company,
           dataSource: "CACHE",
-          cacheReason: "fresh_cache",
+          cacheReason: "no_material_change",
           generatedAt: latest.createdAt,
-          ageHours,
+          ageHours: this.calculateAgeHours(latest.createdAt),
+          freshnessScore: latest.freshnessScore,
+          evidenceAgeMinutes: latest.evidenceAgeMinutes,
+          evidenceQualityScore: latest.evidenceQualityScore,
+          dataQualityScore: latest.dataQualityScore,
+          recommendationReasonCodes: latest.recommendationReasonCodes,
           analysis: {
             research: latest.research,
             scorecard: latest.scorecard,
@@ -123,39 +174,69 @@ class CacheService {
             finalDecision: latest.finalDecision
           }
         };
-      }
-
-      if (!isFresh) {
-        isStale = true;
-      } else if (!isComplete) {
+      } else {
         isIncomplete = true;
       }
     }
 
+    let resolvedCompanyData = null;
     try {
       const { default: companyResearchService } = await import('./companyResearchService.js');
-      const marketInfo = await companyResearchService.fetchMarketData(company);
-      if (marketInfo && marketInfo.companyName && marketInfo.companyName.toLowerCase() !== company.toLowerCase()) {
-        console.log(`[Cache Service] Normalizing query "${company}" to official name "${marketInfo.companyName}"`);
-        matchedCompany = marketInfo.companyName;
+      const companyResearch = await companyResearchService.getCompanyResearch(company);
+      resolvedCompanyData = companyResearch;
+      if (companyResearch && companyResearch.company && companyResearch.company.toLowerCase() !== company.toLowerCase()) {
+        console.log(`[Cache Service] Normalizing query "${company}" to official name "${companyResearch.company}"`);
+        matchedCompany = companyResearch.company;
         
         let normalizedLatest = await this.getLatestAnalysis(matchedCompany);
         if (normalizedLatest) {
           hasRecord = true;
-          const ageHours = this.calculateAgeHours(normalizedLatest.createdAt);
-          const isFresh = this.isAnalysisFresh(normalizedLatest.createdAt);
-          const isComplete = this.isAnalysisComplete(normalizedLatest);
 
-          if (isFresh && isComplete) {
-            console.log(`[Cache Service] Cache HIT for normalized name "${matchedCompany}". Age: ${ageHours} hours.`);
+          // Detect material events for normalized name
+          const eventCheck = await materialEventService.detectMaterialEvents(matchedCompany, normalizedLatest.createdAt);
+          if (eventCheck.hasMaterialEvent) {
+            console.log(`[Cache Service] Material event detected for normalized "${matchedCompany}" since ${normalizedLatest.createdAt}. Triggering EVENT_REFRESH.`);
+            const fresh = await executeWorkflow(matchedCompany, resolvedCompanyData, eventCheck);
+            const formattedFresh = await analysisService.getAnalysisById(fresh.analysisId);
+            this.cacheMisses++;
+            return {
+              analysisId: fresh.analysisId,
+              company: fresh.company,
+              dataSource: "EVENT_REFRESH",
+              cacheReason: "material_event_detected",
+              generatedAt: fresh.createdAt || new Date(),
+              ageHours: 0,
+              freshnessScore: formattedFresh.freshnessScore,
+              evidenceAgeMinutes: formattedFresh.evidenceAgeMinutes,
+              evidenceQualityScore: formattedFresh.evidenceQualityScore,
+              dataQualityScore: formattedFresh.dataQualityScore,
+              recommendationReasonCodes: formattedFresh.recommendationReasonCodes,
+              analysis: {
+                research: formattedFresh.research,
+                scorecard: formattedFresh.scorecard,
+                challenge: formattedFresh.challenge,
+                finalDecision: formattedFresh.finalDecision
+              }
+            };
+          }
+
+          const isComplete = this.isAnalysisComplete(normalizedLatest);
+          if (isComplete) {
+            console.log(`[Cache Service] Cache HIT for normalized name "${matchedCompany}".`);
             this.cacheHits++;
+            this.recordCacheHitExecution(sessionId);
             return {
               analysisId: normalizedLatest.id,
               company: normalizedLatest.company,
               dataSource: "CACHE",
-              cacheReason: "fresh_cache",
+              cacheReason: "no_material_change",
               generatedAt: normalizedLatest.createdAt,
-              ageHours,
+              ageHours: this.calculateAgeHours(normalizedLatest.createdAt),
+              freshnessScore: normalizedLatest.freshnessScore,
+              evidenceAgeMinutes: normalizedLatest.evidenceAgeMinutes,
+              evidenceQualityScore: normalizedLatest.evidenceQualityScore,
+              dataQualityScore: normalizedLatest.dataQualityScore,
+              recommendationReasonCodes: normalizedLatest.recommendationReasonCodes,
               analysis: {
                 research: normalizedLatest.research,
                 scorecard: normalizedLatest.scorecard,
@@ -163,11 +244,7 @@ class CacheService {
                 finalDecision: normalizedLatest.finalDecision
               }
             };
-          }
-
-          if (!isFresh) {
-            isStale = true;
-          } else if (!isComplete) {
+          } else {
             isIncomplete = true;
           }
         }
@@ -176,9 +253,10 @@ class CacheService {
       console.warn(`[Cache Service] Could not resolve official name for "${company}":`, err.message);
     }
 
-    if (hasRecord && isIncomplete && !isStale) {
-      console.log(`[Cache Service] Cache REPAIR for "${matchedCompany}". Fresh but incomplete scorecard. Auto-repairing...`);
-      const fresh = await executeWorkflow(matchedCompany);
+    if (hasRecord && isIncomplete) {
+      console.log(`[Cache Service] Cache REPAIR for "${matchedCompany}". Incomplete scorecard. Auto-repairing...`);
+      const fresh = await executeWorkflow(matchedCompany, resolvedCompanyData);
+      const formattedFresh = await analysisService.getAnalysisById(fresh.analysisId);
       this.cacheRepairs++;
       return {
         analysisId: fresh.analysisId,
@@ -187,12 +265,23 @@ class CacheService {
         cacheReason: "incomplete_cache",
         generatedAt: fresh.createdAt || new Date(),
         ageHours: 0,
-        analysis: fresh.analysis
+        freshnessScore: formattedFresh.freshnessScore,
+        evidenceAgeMinutes: formattedFresh.evidenceAgeMinutes,
+        evidenceQualityScore: formattedFresh.evidenceQualityScore,
+        dataQualityScore: formattedFresh.dataQualityScore,
+        recommendationReasonCodes: formattedFresh.recommendationReasonCodes,
+        analysis: {
+          research: formattedFresh.research,
+          scorecard: formattedFresh.scorecard,
+          challenge: formattedFresh.challenge,
+          finalDecision: formattedFresh.finalDecision
+        }
       };
     }
 
     console.log(`[Cache Service] Cache MISS/STALE for "${matchedCompany}". Generating fresh analysis...`);
-    const fresh = await executeWorkflow(matchedCompany);
+    const fresh = await executeWorkflow(matchedCompany, resolvedCompanyData);
+    const formattedFresh = await analysisService.getAnalysisById(fresh.analysisId);
     this.cacheMisses++;
     return {
       analysisId: fresh.analysisId,
@@ -201,7 +290,17 @@ class CacheService {
       cacheReason: "stale_cache",
       generatedAt: fresh.createdAt || new Date(),
       ageHours: 0,
-      analysis: fresh.analysis
+      freshnessScore: formattedFresh.freshnessScore,
+      evidenceAgeMinutes: formattedFresh.evidenceAgeMinutes,
+      evidenceQualityScore: formattedFresh.evidenceQualityScore,
+      dataQualityScore: formattedFresh.dataQualityScore,
+      recommendationReasonCodes: formattedFresh.recommendationReasonCodes,
+      analysis: {
+        research: formattedFresh.research,
+        scorecard: formattedFresh.scorecard,
+        challenge: formattedFresh.challenge,
+        finalDecision: formattedFresh.finalDecision
+      }
     };
   }
 
@@ -213,51 +312,60 @@ class CacheService {
    * @param {Function} executeWorkflow Async callback to run if cache miss
    * @returns {Promise<Object>} The raw analysis details (either cached or fresh)
    */
-  async getAnalysisForComparison(company, executeWorkflow) {
+  async getAnalysisForComparison(company, executeWorkflow, sessionId = null) {
     let latest = await this.getLatestAnalysis(company);
     let matchedCompany = company;
     let hasRecord = false;
-    let isStale = false;
     let isIncomplete = false;
 
     if (latest) {
       hasRecord = true;
-      const isFresh = this.isAnalysisFresh(latest.createdAt);
-      const isComplete = this.isAnalysisComplete(latest);
 
-      if (isFresh && isComplete) {
-        console.log(`[Cache Service] Comparison query: Cache HIT for "${company}".`);
-        this.cacheHits++;
-        return latest;
+      // 1. Detect material events
+      const eventCheck = await materialEventService.detectMaterialEvents(company, latest.createdAt);
+      if (eventCheck.hasMaterialEvent) {
+        console.log(`[Cache Service] Comparison query: Material event detected for "${company}". Refreshing cache...`);
+        const fresh = await executeWorkflow(company, null, eventCheck);
+        return await analysisService.getAnalysisById(fresh.analysisId);
       }
 
-      if (!isFresh) {
-        isStale = true;
-      } else if (!isComplete) {
+      const isComplete = this.isAnalysisComplete(latest);
+      if (isComplete) {
+        console.log(`[Cache Service] Comparison query: Cache HIT for "${company}".`);
+        this.cacheHits++;
+        this.recordCacheHitExecution(sessionId);
+        return latest;
+      } else {
         isIncomplete = true;
       }
     }
 
+    let resolvedCompanyData = null;
     try {
       const { default: companyResearchService } = await import('./companyResearchService.js');
-      const marketInfo = await companyResearchService.fetchMarketData(company);
-      if (marketInfo && marketInfo.companyName && marketInfo.companyName.toLowerCase() !== company.toLowerCase()) {
-        matchedCompany = marketInfo.companyName;
+      const companyResearch = await companyResearchService.getCompanyResearch(company);
+      resolvedCompanyData = companyResearch;
+      if (companyResearch && companyResearch.company && companyResearch.company.toLowerCase() !== company.toLowerCase()) {
+        matchedCompany = companyResearch.company;
         let normalizedLatest = await this.getLatestAnalysis(matchedCompany);
         if (normalizedLatest) {
           hasRecord = true;
-          const isFresh = this.isAnalysisFresh(normalizedLatest.createdAt);
-          const isComplete = this.isAnalysisComplete(normalizedLatest);
 
-          if (isFresh && isComplete) {
-            console.log(`[Cache Service] Comparison query: Cache HIT for normalized name "${matchedCompany}".`);
-            this.cacheHits++;
-            return normalizedLatest;
+          // Detect material events for normalized name
+          const eventCheck = await materialEventService.detectMaterialEvents(matchedCompany, normalizedLatest.createdAt);
+          if (eventCheck.hasMaterialEvent) {
+            console.log(`[Cache Service] Comparison query: Material event detected for normalized "${matchedCompany}". Refreshing cache...`);
+            const fresh = await executeWorkflow(matchedCompany, resolvedCompanyData, eventCheck);
+            return await analysisService.getAnalysisById(fresh.analysisId);
           }
 
-          if (!isFresh) {
-            isStale = true;
-          } else if (!isComplete) {
+          const isComplete = this.isAnalysisComplete(normalizedLatest);
+          if (isComplete) {
+            console.log(`[Cache Service] Comparison query: Cache HIT for normalized name "${matchedCompany}".`);
+            this.cacheHits++;
+            this.recordCacheHitExecution(sessionId);
+            return normalizedLatest;
+          } else {
             isIncomplete = true;
           }
         }
@@ -266,15 +374,15 @@ class CacheService {
       console.warn(`[Cache Service] Comparison: name resolution failed for "${company}":`, err.message);
     }
 
-    if (hasRecord && isIncomplete && !isStale) {
+    if (hasRecord && isIncomplete) {
       console.log(`[Cache Service] Comparison query: Cache REPAIR for "${matchedCompany}". Auto-repairing...`);
-      const fresh = await executeWorkflow(matchedCompany);
+      const fresh = await executeWorkflow(matchedCompany, resolvedCompanyData);
       this.cacheRepairs++;
       return await analysisService.getAnalysisById(fresh.analysisId);
     }
 
     console.log(`[Cache Service] Comparison query: Cache MISS/STALE for "${matchedCompany}". Generating...`);
-    const fresh = await executeWorkflow(matchedCompany);
+    const fresh = await executeWorkflow(matchedCompany, resolvedCompanyData);
     this.cacheMisses++;
     return await analysisService.getAnalysisById(fresh.analysisId);
   }

@@ -7,7 +7,7 @@ import cacheService from '../services/cacheService.js';
  */
 export const analyzeCompany = async (req, res, next) => {
   try {
-    const { company } = req.body;
+    const { company, sessionId } = req.body;
 
     // Validate request body parameter
     if (!company || typeof company !== 'string' || !company.trim()) {
@@ -21,23 +21,33 @@ export const analyzeCompany = async (req, res, next) => {
     console.log(`[Analysis Controller] Commencing caching-aware workflow analysis for "${companyQueryName}"...`);
 
     // Callback workflow function to invoke if there is a cache miss or stale cache
-    const executeWorkflow = async (resolvedName) => {
+    const executeWorkflow = async (resolvedName, preFetchedData = null, eventMetricsData = null) => {
       const nameToQuery = resolvedName || companyQueryName;
-      return await analysisService.runFullAnalysisAndSave(nameToQuery);
+      return await analysisService.runFullAnalysisAndSave(
+        nameToQuery,
+        preFetchedData,
+        sessionId,
+        req.requestId,
+        eventMetricsData
+      );
     };
 
     // Run cache service wrapper coordinator
-    const result = await cacheService.getOrRefreshAnalysis(companyQueryName, executeWorkflow);
+    const result = await cacheService.getOrRefreshAnalysis(companyQueryName, executeWorkflow, sessionId);
 
-    // Return cached or fresh analysis response matching spec
+    // Return cached or fresh analysis response matching spec (standardizer will wrap this)
     return res.status(200).json({
-      success: true,
       analysisId: result.analysisId,
       company: result.company,
       dataSource: result.dataSource,
       cacheReason: result.cacheReason,
       generatedAt: result.generatedAt,
       ageHours: result.ageHours,
+      freshnessScore: result.freshnessScore,
+      evidenceAgeMinutes: result.evidenceAgeMinutes,
+      evidenceQualityScore: result.evidenceQualityScore,
+      dataQualityScore: result.dataQualityScore,
+      recommendationReasonCodes: result.recommendationReasonCodes,
       analysis: result.analysis
     });
 

@@ -1,6 +1,7 @@
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { getScoringPrompt } from "../prompts/scoringPrompt.js";
 import { scoringSchema } from "../schemas/scoringSchema.js";
+import { getMockScorecard } from "../utils/mockDataProvider.js";
 
 /**
  * Helper to strip markdown code blocks (e.g. ```json ... ```) if returned by the LLM.
@@ -26,17 +27,8 @@ const cleanResponseText = (text) => {
  */
 export const runScoringAgent = async (companyName, researchReport) => {
   if (process.env.MOCK_LLM === 'true') {
-    console.log(`[Scoring Agent] [MOCK MODE] Returning mock scorecard for "${companyName}"`);
-    return {
-      businessQuality: 85,
-      growthPotential: 88,
-      competitiveMoat: 80,
-      financialStrength: 82,
-      riskLevel: 75,
-      overallScore: 82,
-      confidence: 85,
-      recommendation: "INVEST"
-    };
+    console.log(`[Scoring Agent] [MOCK MODE] Returning dynamic mock scorecard for "${companyName}"`);
+    return getMockScorecard(companyName);
   }
 
   const modelName = "gemini-2.5-flash";
@@ -102,30 +94,10 @@ Please correct the response. Return ONLY a valid JSON string that matches the re
 export const scoringAgent = async (state) => {
   console.log("[Graph Node] Scoring Agent executing...");
   try {
-    const scorecard = await runScoringAgent(state.companyData.company, state.researchReport);
-    return {
-      ...state,
-      scorecard,
-      messages: [
-        ...(state.messages || []),
-        {
-          role: "assistant",
-          sender: "ScoringAgent",
-          content: JSON.stringify(scorecard)
-        }
-      ]
-    };
+    const scorecard = await runScoringAgent(state.company, state.research);
+    return { scorecard };
   } catch (err) {
-    return {
-      ...state,
-      messages: [
-        ...(state.messages || []),
-        {
-          role: "assistant",
-          sender: "ScoringAgent",
-          content: `Failed to compile investment scorecard: ${err.message}`
-        }
-      ]
-    };
+    console.error(`[Graph Node] Scoring Agent failed: ${err.message}`);
+    throw err;
   }
 };

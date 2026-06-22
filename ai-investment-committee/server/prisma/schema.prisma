@@ -21,5 +21,13 @@ model Analysis {
   scorecard            Json
   challenge            Json
   finalDecision        Json
+  freshnessScore       Int?
+  evidenceAgeMinutes   Int?
+  recommendationReasonCodes Json?
+  materialEventCount   Int?
+  lastMaterialEventAt  DateTime?
+  requestId            String?
+  confidenceBreakdown  Json?
+  agentMetrics         Json?
   createdAt            DateTime @default(now())
 }

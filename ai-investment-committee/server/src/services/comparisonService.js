@@ -72,10 +72,16 @@ class ComparisonService {
     let missingCount = 0;
 
     for (const field of fields) {
-      // Check nested scorecard first, fallback to parent analysis fields
-      let val = scorecard[field];
-      if (val === undefined || val === null) {
-        val = analysis[field];
+      let val;
+      if (field === 'recommendation') {
+        // Prioritize final committee decision over un-capped scorecard recommendation
+        val = analysis.recommendation || (analysis.finalDecision && analysis.finalDecision.recommendation) || scorecard.recommendation;
+      } else {
+        // Check nested scorecard first, fallback to parent analysis fields
+        val = scorecard[field];
+        if (val === undefined || val === null) {
+          val = analysis[field];
+        }
       }
 
       if (val !== undefined && val !== null) {
@@ -206,12 +212,12 @@ class ComparisonService {
     console.log(`[Comparison Service] Initializing comparison for "${companyA}" and "${companyB}"...`);
 
     // Define workflow callbacks for cache miss cases
-    const executeWorkflowA = async (resolvedName) => {
-      return await analysisService.runFullAnalysisAndSave(resolvedName || companyA);
+    const executeWorkflowA = async (resolvedName, preFetchedData = null) => {
+      return await analysisService.runFullAnalysisAndSave(resolvedName || companyA, preFetchedData);
     };
 
-    const executeWorkflowB = async (resolvedName) => {
-      return await analysisService.runFullAnalysisAndSave(resolvedName || companyB);
+    const executeWorkflowB = async (resolvedName, preFetchedData = null) => {
+      return await analysisService.runFullAnalysisAndSave(resolvedName || companyB, preFetchedData);
     };
 
     // Retrieve analyses using the Smart Cache
@@ -222,6 +228,19 @@ class ComparisonService {
 
     const nameA = analysisA.company;
     const nameB = analysisB.company;
+
+    // Add debug logs for both sides before comparison
+    console.log(`[DEBUG] Company A: "${nameA}"`);
+    console.log(`[DEBUG] Analysis ID A: "${analysisA.id}"`);
+    console.log(`[DEBUG] Scorecard A:`, JSON.stringify(analysisA.scorecard || {}));
+    console.log(`[DEBUG] Company B: "${nameB}"`);
+    console.log(`[DEBUG] Analysis ID B: "${analysisB.id}"`);
+    console.log(`[DEBUG] Scorecard B:`, JSON.stringify(analysisB.scorecard || {}));
+
+    // Prevent comparing the same company under different aliases
+    if (nameA.toLowerCase() === nameB.toLowerCase()) {
+      throw new Error(`Invalid comparison: "${companyA}" and "${companyB}" resolve to the same company ("${nameA}").`);
+    }
 
     // Normalize scorecards and calculate completeness
     const normA = this.normalizeScorecard(analysisA);

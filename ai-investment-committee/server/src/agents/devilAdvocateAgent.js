@@ -1,6 +1,7 @@
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { getDevilAdvocatePrompt } from "../prompts/devilAdvocatePrompt.js";
 import { devilAdvocateSchema } from "../schemas/devilAdvocateSchema.js";
+import { getMockChallenge } from "../utils/mockDataProvider.js";
 
 /**
  * Helper to strip markdown code blocks (e.g. ```json ... ```) if returned by the LLM.
@@ -27,21 +28,8 @@ const cleanResponseText = (text) => {
  */
 export const runDevilAdvocateAgent = async (companyName, researchReport, scorecard) => {
   if (process.env.MOCK_LLM === 'true') {
-    console.log(`[Devil's Advocate] [MOCK MODE] Returning mock challenge for "${companyName}"`);
-    return {
-      bearCase: "AMD is a distant second to NVIDIA in AI compute, and margins may be pressured by TSMC wafer pricing.",
-      keyConcerns: [
-        "NVIDIA CUDA software moat is highly sticky",
-        "Intel's foundry roadmap could regain process parity"
-      ],
-      hiddenRisks: [
-        "Taiwan geopolitical risk affecting single-source TSMC supply"
-      ],
-      worstCaseScenario: "NVIDIA pricing aggressiveness squeezes AMD AI GPU gross margins to under 40%.",
-      counterArguments: [
-        "Cloud providers desperately want a second source to avoid NVIDIA monopoly pricing"
-      ]
-    };
+    console.log(`[Devil's Advocate] [MOCK MODE] Returning dynamic mock challenge for "${companyName}"`);
+    return getMockChallenge(companyName);
   }
 
   const modelName = "gemini-2.5-flash";
@@ -108,33 +96,13 @@ export const devilAdvocateAgent = async (state) => {
   console.log("[Graph Node] Devil's Advocate Agent executing...");
   try {
     const challenge = await runDevilAdvocateAgent(
-      state.companyData.company,
-      state.researchReport,
+      state.company,
+      state.research,
       state.scorecard
     );
-    return {
-      ...state,
-      challenge,
-      messages: [
-        ...(state.messages || []),
-        {
-          role: "assistant",
-          sender: "DevilAdvocateAgent",
-          content: JSON.stringify(challenge)
-        }
-      ]
-    };
+    return { challenge };
   } catch (err) {
-    return {
-      ...state,
-      messages: [
-        ...(state.messages || []),
-        {
-          role: "assistant",
-          sender: "DevilAdvocateAgent",
-          content: `Failed to compile thesis challenge: ${err.message}`
-        }
-      ]
-    };
+    console.error(`[Graph Node] Devil's Advocate Agent failed: ${err.message}`);
+    throw err;
   }
 };

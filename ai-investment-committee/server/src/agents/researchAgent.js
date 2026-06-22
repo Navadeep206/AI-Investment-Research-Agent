@@ -1,6 +1,7 @@
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { getResearchPrompt } from "../prompts/researchPrompt.js";
 import { researchSchema } from "../schemas/researchSchema.js";
+import { getMockResearch } from "../utils/mockDataProvider.js";
 
 /**
  * Helper to strip markdown code blocks (e.g. ```json ... ```) if returned by the LLM.
@@ -25,31 +26,9 @@ const cleanResponseText = (text) => {
  */
 export const runResearchAgent = async (companyData, evidence) => {
   if (process.env.MOCK_LLM === 'true') {
-    console.log(`[Research Agent] [MOCK MODE] Returning mock research report for "${companyData.company || 'AMD'}"`);
-    return {
-      businessOverview: `${companyData.company || 'AMD'} is a global semiconductor company specializing in high-performance processors, graphics cards, and AI accelerators.`,
-      revenueDrivers: [
-        "Data Center CPU and GPU growth (Instinct MI300 series)",
-        "Ryzen processor demand in client PCs",
-        "Embedded and gaming console sales"
-      ],
-      competitiveAdvantages: [
-        "x86 architecture licensing",
-        "Chiplet design leadership",
-        "Strong partnership with TSMC"
-      ],
-      growthCatalysts: [
-        "Expansion of AI GPU roadmap (MI325X, MI350)",
-        "AI PC refresh cycle",
-        "Data center market share gains"
-      ],
-      risks: [
-        "Intense competition from NVIDIA and Intel",
-        "Cyclical nature of the semiconductor market",
-        "Geopolitical chip manufacturing concentration"
-      ],
-      bullCase: "AMD continues to capture market share from Intel in server CPUs and scales its AI GPUs."
-    };
+    const targetComp = companyData.company || 'AMD';
+    console.log(`[Research Agent] [MOCK MODE] Returning dynamic mock research report for "${targetComp}"`);
+    return getMockResearch(targetComp);
   }
 
   const modelName = "gemini-2.5-flash";
@@ -116,28 +95,9 @@ export const researchAgent = async (state) => {
   console.log("[Graph Node] Research Agent executing...");
   try {
     const report = await runResearchAgent(state.companyData, state.evidence);
-    return {
-      ...state,
-      messages: [
-        ...(state.messages || []),
-        {
-          role: "assistant",
-          sender: "ResearchAgent",
-          content: JSON.stringify(report)
-        }
-      ]
-    };
+    return { research: report };
   } catch (err) {
-    return {
-      ...state,
-      messages: [
-        ...(state.messages || []),
-        {
-          role: "assistant",
-          sender: "ResearchAgent",
-          content: `Failed to compile research report: ${err.message}`
-        }
-      ]
-    };
+    console.error(`[Graph Node] Research Agent failed: ${err.message}`);
+    throw err;
   }
 };

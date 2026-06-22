@@ -11,11 +11,31 @@ import evidenceRoutes from './routes/evidenceRoutes.js';
 import historyRoutes from './routes/historyRoutes.js';
 import cacheRoutes from './routes/cacheRoutes.js';
 import comparisonRoutes from './routes/comparisonRoutes.js';
+import executionRoutes from './routes/executionRoutes.js';
+import portfolioRoutes from './routes/portfolioRoutes.js';
+import reportRoutes from './routes/reportRoutes.js';
+import systemHealthRoutes from './routes/healthRoutes.js';
+
+// Custom Hardening Middlewares
+import requestIdMiddleware from './middleware/requestId.js';
+import { requestMonitor } from './middleware/requestMonitor.js';
+import responseStandardizer from './middleware/responseStandardizer.js';
+import { rateLimiter } from './middleware/rateLimiter.js';
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
+
+// Apply tracing and monitoring middlewares first
+app.use(requestIdMiddleware);
+app.use(requestMonitor);
+app.use(responseStandardizer);
+
+// Apply rate limiting to protected endpoints
+app.use('/api/analyze', rateLimiter);
+app.use('/api/compare', rateLimiter);
+app.use('/api/portfolio', rateLimiter);
 
 // Standard Middlewares
 app.use(cors({
@@ -38,13 +58,22 @@ app.use('/api', evidenceRoutes);
 app.use('/api', historyRoutes);
 app.use('/api', cacheRoutes);
 app.use('/api', comparisonRoutes);
+app.use('/api', executionRoutes);
+app.use('/api', portfolioRoutes);
+app.use('/api', reportRoutes);
+app.use('/api', systemHealthRoutes);
 
 // Global Error Handler
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(err.status || 500).json({
     success: false,
-    message: err.message || 'Internal Server Error'
+    timestamp: new Date().toISOString(),
+    requestId: req.requestId || null,
+    error: {
+      message: err.message || 'Internal Server Error',
+      status: err.status || 500
+    }
   });
 });
 

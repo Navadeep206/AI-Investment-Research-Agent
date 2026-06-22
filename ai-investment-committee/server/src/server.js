@@ -18,3 +18,4 @@ process.on('SIGTERM', () => {
     console.log('HTTP server closed');
   });
 });
+// Trigger nodemon reload
