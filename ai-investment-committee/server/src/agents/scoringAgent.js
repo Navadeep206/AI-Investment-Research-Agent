@@ -31,7 +31,7 @@ export const runScoringAgent = async (companyName, researchReport) => {
     return getMockScorecard(companyName);
   }
 
-  const modelName = "gemini-2.5-flash";
+  const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
   if (!apiKey) {
@@ -43,6 +43,7 @@ export const runScoringAgent = async (companyName, researchReport) => {
     model: modelName,
     apiKey: apiKey,
     temperature: 0.1,
+    maxRetries: 1,
   });
 
   const prompt = getScoringPrompt(companyName, researchReport);
@@ -58,33 +59,11 @@ export const runScoringAgent = async (companyName, researchReport) => {
     const parsedData = JSON.parse(cleanedText);
     const validatedData = scoringSchema.parse(parsedData);
 
-    console.log(`[Scoring Agent] Scoring succeeded on first attempt.`);
+    console.log(`[Scoring Agent] Scoring succeeded.`);
     return validatedData;
-  } catch (firstAttemptError) {
-    console.warn(`[Scoring Agent] First attempt failed: ${firstAttemptError.message}. Retrying one time with correction prompt...`);
-
-    try {
-      const retryPrompt = `${prompt}
-
-WARNING: Your previous response failed parsing or validation.
-The error encountered was: "${firstAttemptError.message}"
-Raw text received was:
-"${responseText}"
-
-Please correct the response. Return ONLY a valid JSON string that matches the required schema keys. Ensure that the recommendation conforms to overallScore thresholds (>=80 is INVEST, >=60 is WATCH, <60 is PASS). Do not write markdown wraps or explanations.`;
-
-      console.log(`[Scoring Agent] Dispatching corrected scoring query to Gemini (Attempt 2)...`);
-      const retryResponse = await model.invoke(retryPrompt);
-      const cleanedRetryText = cleanResponseText(retryResponse.content);
-      const parsedRetryData = JSON.parse(cleanedRetryText);
-      const validatedRetryData = scoringSchema.parse(parsedRetryData);
-
-      console.log(`[Scoring Agent] Scoring succeeded on second attempt.`);
-      return validatedRetryData;
-    } catch (secondAttemptError) {
-      console.error(`[Scoring Agent] Both attempts failed. Final error: ${secondAttemptError.message}`);
-      throw new Error("Investment scoring failed due to persistent parsing or validation errors");
-    }
+  } catch (error) {
+    console.error(`[Scoring Agent] Scoring failed: ${error.message}`);
+    throw error;
   }
 };
 

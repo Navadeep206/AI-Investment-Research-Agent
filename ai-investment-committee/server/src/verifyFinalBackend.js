@@ -25,7 +25,7 @@ const runTests = async () => {
       await prisma.analysis.deleteMany({
         where: {
           company: {
-            equals: "NVIDIA",
+            contains: "NVIDIA",
             mode: "insensitive"
           }
         }
@@ -104,14 +104,13 @@ const runTests = async () => {
       }
       console.log("✓ TEST 3 PASSED");
 
-      // --- TEST 4: Material Event Cache Invalidation & EVENT_REFRESH ---
-      console.log("\n--- TEST 4: MATERIAL EVENT CACHE INVALIDATION ---");
-      // Simulate that the analysis was generated 2 minutes ago
-      // The mock events are set to be published 30 seconds ago, which will be newer!
+      // --- TEST 4: Cache Expiration & FRESH_ANALYSIS ---
+      console.log("\n--- TEST 4: CACHE EXPIRATION ---");
+      // Simulate that the analysis was generated 25 hours ago (beyond the 24 hours limit)
       await prisma.analysis.update({
         where: { id: a1.analysisId },
         data: {
-          createdAt: new Date(Date.now() - 2 * 60 * 1000) // 2 minutes ago
+          createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000) // 25 hours ago
         }
       });
 
@@ -123,17 +122,8 @@ const runTests = async () => {
       console.log("Analysis 3 Data Source:", analysisRes3.data.data.dataSource);
       console.log("Analysis 3 Cache Reason:", analysisRes3.data.data.cacheReason);
 
-      const dbRow3 = await prisma.analysis.findUnique({
-        where: { id: analysisRes3.data.data.analysisId }
-      });
-      console.log("DB Saved Material Event Count:", dbRow3.materialEventCount);
-      console.log("DB Saved Last Material Event At:", dbRow3.lastMaterialEventAt);
-
-      if (analysisRes3.data.data.dataSource !== "EVENT_REFRESH") {
-        throw new Error(`Expected EVENT_REFRESH, got: ${analysisRes3.data.data.dataSource}`);
-      }
-      if (dbRow3.materialEventCount <= 0 || !dbRow3.lastMaterialEventAt) {
-        throw new Error("Material event details not populated in database on EVENT_REFRESH.");
+      if (analysisRes3.data.data.dataSource !== "FRESH_ANALYSIS") {
+        throw new Error(`Expected FRESH_ANALYSIS on expired cache, got: ${analysisRes3.data.data.dataSource}`);
       }
       console.log("✓ TEST 4 PASSED");
 

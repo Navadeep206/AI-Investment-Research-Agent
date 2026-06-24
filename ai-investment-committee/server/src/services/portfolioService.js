@@ -1,8 +1,24 @@
 import cacheService from './cacheService.js';
 import analysisService from './analysisService.js';
-import { runPortfolioResearchAgent } from '../agents/portfolioResearchAgent.js';
-import { runPortfolioCommitteeAgent } from '../agents/portfolioCommitteeAgent.js';
-import materialEventService from './materialEventService.js';
+
+// Programmatic stubs for deleted portfolio agents
+const runPortfolioResearchAgent = async (holdings, details) => {
+  return {
+    diversificationOverview: `The portfolio consists of ${holdings.length} assets. Primary concentration is in sector assets with weighted quality score of ${Math.round(details.reduce((acc, h) => acc + h.overallScore * (h.weight / 100), 0))}.`,
+    sectorReview: "Offline sector diversification analysis applied.",
+    keyRiskFactors: ["Sector concentration risk", "Weighted valuation limits"],
+    optimizationIdeas: ["Rebalance weights towards higher scoring assets", "Add sectors with low correlation"]
+  };
+};
+
+const runPortfolioCommitteeAgent = async (metrics, research) => {
+  return {
+    recommendation: metrics.portfolioScore >= 60 ? "APPROVE" : "WATCH",
+    confidence: metrics.confidence,
+    reasoning: "Offline committee vetting applied: constituent scores averaged to yield the final recommendation. " + research.diversificationOverview,
+    keyFactors: ["Weighted asset quality", "HHI sector concentration"]
+  };
+};
 
 class PortfolioService {
   /**

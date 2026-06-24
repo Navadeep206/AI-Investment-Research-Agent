@@ -257,7 +257,7 @@ const Compare = () => {
       <div className="max-w-7xl mx-auto space-y-6">
         
         {/* Page Header */}
-        <div className="border-b border-[#1F2937] pb-6 flex flex-col sm:flex-row justify-between sm:items-end gap-4 no-print">
+        <div className="sticky top-0 z-20 bg-[#0A0E17] pt-2 pb-6 border-b border-[#1F2937] flex flex-col sm:flex-row justify-between sm:items-end gap-4 no-print">
           <div>
             <h1 className="text-xl font-bold tracking-widest text-white">COMPARE COMPANIES TERMINAL</h1>
             <p className="text-xs text-[#9CA3AF] mt-1 font-sans">

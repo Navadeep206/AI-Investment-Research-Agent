@@ -30,6 +30,11 @@ const Analyze = () => {
   const [recentCompanies, setRecentCompanies] = useState([]);
   const [showRecentDropdown, setShowRecentDropdown] = useState(false);
   const [evidenceFilter, setEvidenceFilter] = useState('ALL');
+  const [expandedAgents, setExpandedAgents] = useState({
+    research: false,
+    devil: false,
+    committee: false
+  });
 
   // Load recent searches on mount
   useEffect(() => {
@@ -189,7 +194,7 @@ const Analyze = () => {
       <div className="max-w-7xl mx-auto space-y-6">
         
         {/* Header Title */}
-        <div className="border-b border-[#1F2937] pb-6 flex flex-col sm:flex-row justify-between sm:items-end gap-4">
+        <div className="sticky top-0 z-20 bg-[#0A0E17] pt-2 pb-6 border-b border-[#1F2937] flex flex-col sm:flex-row justify-between sm:items-end gap-4">
           <div>
             <h1 className="text-xl font-bold tracking-widest text-white">ANALYZE COMPANY TERMINAL</h1>
             <p className="text-xs text-[#9CA3AF] mt-1 font-sans">
@@ -391,14 +396,22 @@ const Analyze = () => {
                 {/* Research Agent */}
                 <div className="bg-[#111827] border border-[#1F2937] p-5 flex flex-col justify-between space-y-4">
                   <div className="space-y-3">
-                    <h4 className="text-[10px] font-bold text-white tracking-widest border-b border-[#1F2937] pb-1.5 flex items-center gap-1.5">
-                      <FileText className="h-3.5 w-3.5 text-[#3B82F6]" />
-                      RESEARCH AGENT
+                    <h4 className="text-[10px] font-bold text-white tracking-widest border-b border-[#1F2937] pb-1.5 flex items-center justify-between gap-1.5">
+                      <span className="flex items-center gap-1.5">
+                        <FileText className="h-3.5 w-3.5 text-[#3B82F6]" />
+                        RESEARCH AGENT
+                      </span>
+                      <button 
+                        onClick={() => setExpandedAgents(prev => ({ ...prev, research: !prev.research }))}
+                        className="text-[8px] text-[#3B82F6] hover:underline cursor-pointer uppercase font-bold"
+                      >
+                        {expandedAgents.research ? '[ COLLAPSE ]' : '[ ELABORATE ]'}
+                      </button>
                     </h4>
                     <div className="space-y-2">
                       <div>
                         <span className="text-[8px] text-[#3B82F6] font-bold uppercase">Business Overview</span>
-                        <p className="text-[10px] text-[#9CA3AF] leading-relaxed line-clamp-3 mt-0.5">
+                        <p className={`text-[10px] text-[#9CA3AF] leading-relaxed mt-0.5 ${expandedAgents.research ? '' : 'line-clamp-3'}`}>
                           {record.research?.businessOverview || 'No research summary found.'}
                         </p>
                       </div>
@@ -406,7 +419,7 @@ const Analyze = () => {
                         <div>
                           <span className="text-[8px] text-[#3B82F6] font-bold uppercase">Growth Drivers</span>
                           <ul className="list-disc pl-3 text-[10px] text-[#9CA3AF] mt-0.5 space-y-0.5">
-                            {record.research.growthCatalysts.slice(0, 2).map((g, i) => <li key={i}>{g}</li>)}
+                            {record.research.growthCatalysts.slice(0, expandedAgents.research ? undefined : 2).map((g, i) => <li key={i}>{g}</li>)}
                           </ul>
                         </div>
                       )}
@@ -414,7 +427,7 @@ const Analyze = () => {
                         <div>
                           <span className="text-[8px] text-[#3B82F6] font-bold uppercase">Competitive Moats</span>
                           <ul className="list-disc pl-3 text-[10px] text-[#9CA3AF] mt-0.5 space-y-0.5">
-                            {record.research.competitiveAdvantages.slice(0, 2).map((a, i) => <li key={i}>{a}</li>)}
+                            {record.research.competitiveAdvantages.slice(0, expandedAgents.research ? undefined : 2).map((a, i) => <li key={i}>{a}</li>)}
                           </ul>
                         </div>
                       )}
@@ -464,14 +477,22 @@ const Analyze = () => {
                 {/* Devil's Advocate */}
                 <div className="bg-[#111827] border border-[#1F2937] p-5 flex flex-col justify-between space-y-4">
                   <div className="space-y-3">
-                    <h4 className="text-[10px] font-bold text-white tracking-widest border-b border-[#1F2937] pb-1.5 flex items-center gap-1.5">
-                      <ShieldAlert className="h-3.5 w-3.5 text-[#EF4444]" />
-                      DEVIL'S ADVOCATE
+                    <h4 className="text-[10px] font-bold text-white tracking-widest border-b border-[#1F2937] pb-1.5 flex items-center justify-between gap-1.5">
+                      <span className="flex items-center gap-1.5">
+                        <ShieldAlert className="h-3.5 w-3.5 text-[#EF4444]" />
+                        DEVIL'S ADVOCATE
+                      </span>
+                      <button 
+                        onClick={() => setExpandedAgents(prev => ({ ...prev, devil: !prev.devil }))}
+                        className="text-[8px] text-[#EF4444] hover:underline cursor-pointer uppercase font-bold"
+                      >
+                        {expandedAgents.devil ? '[ COLLAPSE ]' : '[ ELABORATE ]'}
+                      </button>
                     </h4>
                     <div className="space-y-2">
                       <div>
                         <span className="text-[8px] text-[#EF4444] font-bold uppercase">Bear Case</span>
-                        <p className="text-[10px] text-[#9CA3AF] leading-relaxed line-clamp-3 mt-0.5">
+                        <p className={`text-[10px] text-[#9CA3AF] leading-relaxed mt-0.5 ${expandedAgents.devil ? '' : 'line-clamp-3'}`}>
                           {record.challenge?.bearCase || 'No bear case scenario compiled.'}
                         </p>
                       </div>
@@ -479,14 +500,14 @@ const Analyze = () => {
                         <div>
                           <span className="text-[8px] text-[#EF4444] font-bold uppercase">Critical Concerns</span>
                           <ul className="list-disc pl-3 text-[10px] text-[#9CA3AF] mt-0.5 space-y-0.5">
-                            {record.challenge.keyConcerns.slice(0, 2).map((c, i) => <li key={i}>{c}</li>)}
+                            {record.challenge.keyConcerns.slice(0, expandedAgents.devil ? undefined : 2).map((c, i) => <li key={i}>{c}</li>)}
                           </ul>
                         </div>
                       )}
                       {record.challenge?.worstCaseScenario && (
                         <div>
                           <span className="text-[8px] text-[#EF4444] font-bold uppercase">Worst Case Outcome</span>
-                          <p className="text-[10px] text-[#9CA3AF] leading-relaxed line-clamp-2 mt-0.5 italic">
+                          <p className={`text-[10px] text-[#9CA3AF] leading-relaxed mt-0.5 italic ${expandedAgents.devil ? '' : 'line-clamp-2'}`}>
                             "{record.challenge.worstCaseScenario}"
                           </p>
                         </div>
@@ -498,14 +519,22 @@ const Analyze = () => {
                 {/* Committee Decision */}
                 <div className="bg-[#111827] border border-[#1F2937] p-5 flex flex-col justify-between space-y-4">
                   <div className="space-y-3">
-                    <h4 className="text-[10px] font-bold text-white tracking-widest border-b border-[#1F2937] pb-1.5 flex items-center gap-1.5">
-                      <Award className="h-3.5 w-3.5 text-amber-500" />
-                      COMMITTEE MEMO
+                    <h4 className="text-[10px] font-bold text-white tracking-widest border-b border-[#1F2937] pb-1.5 flex items-center justify-between gap-1.5">
+                      <span className="flex items-center gap-1.5">
+                        <Award className="h-3.5 w-3.5 text-amber-500" />
+                        COMMITTEE MEMO
+                      </span>
+                      <button 
+                        onClick={() => setExpandedAgents(prev => ({ ...prev, committee: !prev.committee }))}
+                        className="text-[8px] text-amber-500 hover:underline cursor-pointer uppercase font-bold"
+                      >
+                        {expandedAgents.committee ? '[ COLLAPSE ]' : '[ ELABORATE ]'}
+                      </button>
                     </h4>
                     <div className="space-y-2 text-[#9CA3AF]">
                       <div>
                         <span className="text-[8px] text-amber-500 font-bold uppercase">Final Consensus Reasoning</span>
-                        <p className="text-[10px] leading-relaxed line-clamp-4 mt-0.5 text-white">
+                        <p className={`text-[10px] leading-relaxed mt-0.5 text-white ${expandedAgents.committee ? '' : 'line-clamp-4'}`}>
                           {record.finalDecision?.reasoning || 'No committee memo found.'}
                         </p>
                       </div>

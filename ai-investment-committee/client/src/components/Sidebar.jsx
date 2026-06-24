@@ -47,7 +47,7 @@ const Sidebar = () => {
   ];
 
   return (
-    <aside className="w-64 min-h-screen bg-[#0A0E17] border-r border-[#1F2937] flex flex-col font-mono text-xs select-none">
+    <aside className="w-64 h-full bg-[#0A0E17] border-r border-[#1F2937] flex flex-col font-mono text-xs select-none">
       {/* Brand Header */}
       <div className="p-6 border-b border-[#1F2937]">
         <div className="flex items-center space-x-2.5">

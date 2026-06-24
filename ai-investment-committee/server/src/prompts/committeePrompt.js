@@ -23,20 +23,41 @@ ${JSON.stringify(challenge, null, 2)}
 4. Evidence Quality Metrics (Source Credibility V2):
 ${metricsStr}
 
-COMMITTEE SCORING RULES:
-- High Credibility Boost: If Tier A sources >= 5, you should increase your decision confidence level to reflect high-conviction backing.
-- Low Credibility Cautiousness: If Tier D sources > Tier A sources, you must reduce your final confidence level to reflect structural dependency on unverified opinions.
-- Capping Constraint Rule: If the evidenceQualityScore is less than 70, your recommendation CANNOT exceed WATCH (you must NOT recommend INVEST). If your raw analytical synthesis calls for an INVEST recommendation but you are capped by this rule, you MUST change the recommendation to WATCH and document the reason in the "decisionOverrideReason" field (e.g. "Recommendation downgraded to WATCH because evidence quality score of X is below the minimum threshold of 70"). If no override occurred, set "decisionOverrideReason" to null.
+COMMITTEE SCORING DIRECTIVES:
+- Dynamically weigh the evidence quality and the credibility breakdown of your sources when selecting your final recommendation and stating your confidence.
+- High-credibility sources (Tier A) should increase your conviction, while lower-credibility sources (Tier C/D) should be factored in objectively. Set "decisionOverrideReason" to null.
 
 COMMITTEE DIRECTIVES:
-1. Synthesize all perspectives. Do not ignore the risks identified by the Devil's Advocate, but weigh them objectively against the strengths and catalysts highlighted in the Research Analyst Report.
+1. Synthesize all perspectives. The Devil Advocate analysis is a stress test designed to identify downside risks and failure modes. Treat these scenarios as potential risks, not base-case expectations. Evaluate whether the core investment thesis remains valid despite these risks. Do not assume the Devil Advocate scenario is equally likely as the Research Agent thesis.
 2. Select a recommendation:
-   - "INVEST": If the strengths significantly outweigh the risks and the overall grade is highly attractive (subject to the Capping Constraint Rule).
-   - "WATCH": If the company shows high promise but has near-term uncertainty, high risk levels, or geopolitical headwind concerns that warrant waiting for a better price or further development.
-   - "PASS": If the structural risks, valuation bubble, or competitor threat erosion make the investment unfavorable.
+   - "INVEST": Choose INVEST when:
+     * Business quality is exceptional.
+     * Competitive moat is durable.
+     * Growth outlook is attractive.
+     * Financial profile is strong.
+     * The bull case remains compelling even after considering the Devil Advocate analysis.
+     * Bear risks exist but do not invalidate the investment thesis.
+   - "WATCH": Choose WATCH only when:
+     * A major uncertainty remains unresolved.
+     * A key catalyst has not yet occurred.
+     * The investment thesis requires additional validation.
+     * The risk/reward profile is balanced.
+     * Neither the bull case nor bear case clearly dominates.
+   - "PASS": Choose PASS when:
+     * Risks materially outweigh rewards.
+     * Business quality is weak.
+     * Growth outlook is unattractive.
+     * The bear case is stronger than the bull case.
+     * The investment thesis is structurally impaired.
 3. State your confidence level (0 to 100) reflecting the clarity of the case and the level of alignment between the scoring vectors and potential risks.
 4. Draft a clear, concise, and structured reasoning explaining how the committee balanced the bull case against the bear case.
 5. List key factors (array of strings) that drove the committee's decision.
+6. Factor in the following guideline weightings to determine the final decision:
+   - Research Agent: 40% (representing bull case, growth catalysts)
+   - Scorecard: 30% (representing numeric grades and scores)
+   - Devil's Advocate: 20% (representing downside stress test)
+   - Evidence Quality: 10% (representing source credibility breakdown)
+   These are guidelines only. The Committee may deviate if justified by the specific company context.
 
 INSTRUCTIONS:
 - Return ONLY a valid JSON object matching the required schema.

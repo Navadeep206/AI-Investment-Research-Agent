@@ -31,7 +31,7 @@ export const runResearchAgent = async (companyData, evidence) => {
     return getMockResearch(targetComp);
   }
 
-  const modelName = "gemini-2.5-flash";
+  const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
   if (!apiKey) {
@@ -43,6 +43,7 @@ export const runResearchAgent = async (companyData, evidence) => {
     model: modelName,
     apiKey: apiKey,
     temperature: 0.1,
+    maxRetries: 1,
   });
 
   const prompt = getResearchPrompt(companyData, evidence);
@@ -58,33 +59,11 @@ export const runResearchAgent = async (companyData, evidence) => {
     const parsedData = JSON.parse(cleanedText);
     const validatedData = researchSchema.parse(parsedData);
     
-    console.log(`[Research Agent] Analysis succeeded on first attempt.`);
+    console.log(`[Research Agent] Analysis succeeded.`);
     return validatedData;
-  } catch (firstAttemptError) {
-    console.warn(`[Research Agent] First attempt failed: ${firstAttemptError.message}. Retrying one time with correction prompt...`);
-    
-    try {
-      const retryPrompt = `${prompt}
-
-WARNING: Your previous response failed parsing or validation.
-The error encountered was: "${firstAttemptError.message}"
-Raw text received was:
-"${responseText}"
-
-Please fix this response. Return ONLY a valid JSON string that matches the required schema keys. Do not output markdown code blocks or explanations.`;
-
-      console.log(`[Research Agent] Dispatching corrected query to Gemini (Attempt 2)...`);
-      const retryResponse = await model.invoke(retryPrompt);
-      const cleanedRetryText = cleanResponseText(retryResponse.content);
-      const parsedRetryData = JSON.parse(cleanedRetryText);
-      const validatedRetryData = researchSchema.parse(parsedRetryData);
-      
-      console.log(`[Research Agent] Analysis succeeded on second attempt.`);
-      return validatedRetryData;
-    } catch (secondAttemptError) {
-      console.error(`[Research Agent] Both attempts failed. Final error: ${secondAttemptError.message}`);
-      throw new Error("Research generation failed due to persistent parsing or validation errors");
-    }
+  } catch (error) {
+    console.error(`[Research Agent] Analysis failed: ${error.message}`);
+    throw error;
   }
 };
 

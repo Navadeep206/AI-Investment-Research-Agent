@@ -1,22 +1,10 @@
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { TavilySearchAPIRetriever } from "@langchain/community/retrievers/tavily_search_api";
 import { evidenceSchema } from "../schemas/evidenceSchema.js";
-
-/**
- * Helper to strip markdown code blocks (e.g. ```json ... ```) if returned by the LLM.
- */
-const cleanResponseText = (text) => {
-  if (typeof text !== 'string') return '';
-  let cleaned = text.trim();
-  cleaned = cleaned.replace(/^```(json)?/i, '');
-  cleaned = cleaned.replace(/```$/, '');
-  return cleaned.trim();
-};
 
 class EvidenceService {
   /**
    * Performs parallel search queries on Tavily for a company,
-   * gathers results, and uses Gemini to extract the top 10 evidence items.
+   * gathers results, and normalizes them directly into evidence objects (0 Gemini calls).
    * 
    * @param {string} company Company name
    * @returns {Promise<Array>} List of evidence items conforming to evidenceSchema
@@ -27,39 +15,10 @@ class EvidenceService {
     }
 
     const companyName = company.trim();
-
-    if (process.env.MOCK_LLM === 'true') {
-      console.log(`[Evidence Service] [MOCK MODE] Returning mock evidence list for "${companyName}"`);
-      return [
-        {
-          claim: `${companyName} launches new high-performance AI chip with upgraded hardware architecture.`,
-          source: "Bloomberg",
-          url: "https://www.bloomberg.com/news/articles/amd-ai-accelerator-mi325x",
-          confidence: 90
-        },
-        {
-          claim: `${companyName} EPYC processor line gains server market share.`,
-          source: "Reuters",
-          url: "https://www.reuters.com/technology/amd-epyc-market-share",
-          confidence: 88
-        },
-        {
-          claim: "Industry reports indicate growing developer interest in alternative software tools.",
-          source: "CNBC",
-          url: "https://www.cnbc.com/news/amd-vs-nvidia-ai-software",
-          confidence: 85
-        }
-      ];
-    }
-
     const tavilyKey = process.env.TAVILY_API_KEY;
-    const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
     if (!tavilyKey) {
       throw new Error("Tavily API key is not configured. Please set TAVILY_API_KEY in the environment.");
-    }
-    if (!geminiKey) {
-      throw new Error("Gemini API key is not configured. Please set GEMINI_API_KEY or GOOGLE_API_KEY in the environment.");
     }
 
     console.log(`[Evidence Service] Collecting search evidence for "${companyName}"...`);
@@ -103,80 +62,37 @@ class EvidenceService {
       return [];
     }
 
-    console.log(`[Evidence Service] Aggregated ${allSearchResults.length} raw search findings. Extracting key claims using Gemini...`);
+    console.log(`[Evidence Service] Aggregated ${allSearchResults.length} raw search findings. Performing direct normalization...`);
 
-    // Instantiate Gemini model for extraction
-    const model = new ChatGoogleGenerativeAI({
-      model: "gemini-2.5-flash",
-      apiKey: geminiKey,
-      temperature: 0.1
+    // Normalize search results directly to evidence objects (0 Gemini calls)
+    const normalizedList = allSearchResults.slice(0, 10).map((res) => {
+      let sourceName = "Web Source";
+      try {
+        const domain = new URL(res.url).hostname;
+        sourceName = domain.replace('www.', '');
+      } catch (_) {}
+
+      // Constrain claim text length to prevent overflow in downstream agent prompts
+      let claim = res.content || res.title || `Latest updates on ${companyName}`;
+      if (claim.length > 200) {
+        claim = claim.substring(0, 197) + "...";
+      }
+
+      return {
+        claim: claim,
+        source: sourceName,
+        url: res.url,
+        confidence: 80 // Default standard confidence score
+      };
     });
 
-    const prompt = `You are a professional equity research assistant.
-You are given a list of raw search results from the web regarding "${companyName}".
-Your goal is to extract the top 10 most relevant, concrete, and high-quality evidence items from these search results.
-
-Raw Web Search Results:
-${JSON.stringify(allSearchResults, null, 2)}
-
-INSTRUCTIONS:
-1. Synthesize the findings and extract exactly 10 distinct, key evidence items (or fewer if there is insufficient data, but aim for 10).
-2. For each evidence item, you must populate:
-   - "claim": A concise, clear, and factual statement of the finding, latest event, risk, advantage, or metrics found.
-   - "source": The exact domain name or publication name (e.g. "Reuters", "Bloomberg", "TechCrunch", "CNBC") extracted from the title/URL.
-   - "url": The exact source URL corresponding to the claim.
-   - "confidence": An integer between 0 and 100 indicating the reliability of the source and strength of the claim.
-3. Return ONLY a valid JSON array matching the required structure.
-4. Do NOT wrap your response in markdown code blocks.
-5. Do NOT write any introduction, footnotes, notes, or explanations. Return ONLY the raw JSON string.
-
-REQUIRED JSON FORMAT:
-[
-  {
-    "claim": "Example statement of evidence",
-    "source": "Source Name",
-    "url": "https://example.com",
-    "confidence": 90
-  },
-  ...
-]`;
-
-    let responseText = "";
     try {
-      const response = await model.invoke(prompt);
-      responseText = response.content;
-
-      const cleanedText = cleanResponseText(responseText);
-      const parsedData = JSON.parse(cleanedText);
-      const validatedData = evidenceSchema.parse(parsedData);
-
-      console.log(`[Evidence Service] Successfully synthesized and validated ${validatedData.length} evidence items.`);
+      const validatedData = evidenceSchema.parse(normalizedList);
+      console.log(`[Evidence Service] Successfully normalized and validated ${validatedData.length} evidence items.`);
       return validatedData;
     } catch (err) {
-      console.error(`[Evidence Service] LLM extraction or schema validation failed:`, err.message);
-      
-      // Fallback: build up to 10 basic evidence objects directly from search results if LLM fails
-      const fallbackList = allSearchResults.slice(0, 10).map((res) => {
-        // Extract a simple source name from URL
-        let sourceName = "Web Source";
-        try {
-          const domain = new URL(res.url).hostname;
-          sourceName = domain.replace('www.', '');
-        } catch (_) {}
-
-        return {
-          claim: res.title || "Latest updates on " + companyName,
-          source: sourceName,
-          url: res.url,
-          confidence: 70
-        };
-      });
-
-      try {
-        return evidenceSchema.parse(fallbackList);
-      } catch (_) {
-        return [];
-      }
+      console.error(`[Evidence Service] Schema validation failed:`, err.message);
+      return [];
     }
   }
 }

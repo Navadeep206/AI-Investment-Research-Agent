@@ -214,7 +214,7 @@ const PortfolioBuilder = () => {
       <div className="max-w-7xl mx-auto space-y-6">
         
         {/* Header Title */}
-        <div className="border-b border-[#1F2937] pb-6 flex flex-col sm:flex-row justify-between sm:items-end gap-4">
+        <div className="sticky top-0 z-20 bg-[#0A0E17] pt-2 pb-6 border-b border-[#1F2937] flex flex-col sm:flex-row justify-between sm:items-end gap-4">
           <div>
             <h1 className="text-xl font-bold tracking-widest text-white uppercase">Portfolio Intelligence Terminal</h1>
             <p className="text-xs text-[#9CA3AF] mt-1 font-sans">
@@ -584,6 +584,14 @@ const PortfolioBuilder = () => {
                   </div>
                 </div>
 
+              </div>
+            )}
+          </div>
+        </div>
+
+        {results && !loading && (
+          <div className="space-y-6">
+
                 {/* Section 6: Committee Room Widgets */}
                 <div className="space-y-4">
                   <h3 className="text-xs font-bold text-white tracking-widest border-b border-[#1F2937] pb-2">
@@ -798,10 +806,6 @@ const PortfolioBuilder = () => {
 
               </div>
             )}
-
-          </div>
-
-        </div>
 
       </div>
     </div>

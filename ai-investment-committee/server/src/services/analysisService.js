@@ -163,49 +163,26 @@ class AnalysisService {
    * @returns {Promise<Object>} Formatted object matching executeWorkflow expectations
    */
   async runFullAnalysisAndSave(companyQueryName, preFetchedCompanyData = null, sessionId = null, requestId = null, eventMetricsData = null) {
-    const { default: companyResearchService } = await import('./companyResearchService.js');
     const { investmentGraph } = await import('../graph/investmentGraph.js');
-    const { default: evidenceService } = await import('./evidenceService.js');
-    const { default: sourceRankingService } = await import('./sourceRankingService.js');
 
-    // Step 1: Query company profile, market metrics and search evidence in parallel
-    let companyData;
-    let evidence = [];
-    let evidenceMetrics = null;
-    
-    const researchPromise = preFetchedCompanyData
-      ? Promise.resolve(preFetchedCompanyData)
-      : companyResearchService.getCompanyResearch(companyQueryName);
+    // If we have pre-fetched data (e.g. from cache normalization), we can skip the graph's research node.
+    // However, for simplicity and to fit the new graph structure, we will always start from the query name.
+    // The graph now handles all data fetching.
+    const resolvedCompanyQuery = preFetchedCompanyData ? preFetchedCompanyData.company : companyQueryName;
 
-    const [researchData, evidenceData] = await Promise.all([
-      researchPromise,
-      evidenceService.collectEvidence(companyQueryName).catch(err => {
-        console.warn(`[Analysis Service] Evidence collection failed: ${err.message}`);
-        return [];
-      })
-    ]);
-    
-    const { rankedEvidence, metrics } = sourceRankingService.rankEvidence(evidenceData);
-    companyData = researchData;
-    evidence = rankedEvidence;
-    evidenceMetrics = metrics;
-
-    // Step 2: Run the LangGraph StateGraph workflow
-    console.log(`[Analysis Service] Invoking LangGraph workflow for "${companyData.company}"...`);
+    // Step 1: Run the LangGraph StateGraph workflow
+    console.log(`[Analysis Service] Invoking LangGraph workflow for "${resolvedCompanyQuery}"...`);
     if (sessionId) {
       const { default: executionTracker } = await import('./executionTracker.js');
       executionTracker.initializeSession(sessionId);
     }
     const result = await investmentGraph.invoke({
-      company: companyData.company,
-      companyData: companyData,
-      evidence: evidence,
-      evidenceMetrics: evidenceMetrics,
+      company: resolvedCompanyQuery, // Start with the query name
       sessionId: sessionId,
       requestId: requestId
     });
 
-    // Step 3: Persist analysis to database
+    // Step 2: Persist analysis to database
     const finalDecisionToSave = result.finalDecision ? {
       ...result.finalDecision,
       materialEvents: eventMetricsData ? eventMetricsData.events : []
@@ -213,18 +190,18 @@ class AnalysisService {
 
     const researchToSave = result.research ? {
       ...result.research,
-      evidence: evidence || []
+      evidence: result.evidence || []
     } : null;
 
     const saved = await this.saveAnalysis({
-      company: companyData.company,
-      industry: companyData.industry,
-      marketCap: companyData.marketCap,
+      company: result.company,
+      industry: result.companyData.industry,
+      marketCap: result.companyData.marketCap,
       overallScore: result.scorecard ? result.scorecard.overallScore : null,
       recommendation: result.finalDecision ? result.finalDecision.recommendation : null,
       confidence: result.finalDecision ? result.finalDecision.confidence : null,
-      sourcesUsed: evidence ? evidence.length : 0,
-      evidenceQualityScore: evidenceMetrics ? evidenceMetrics.evidenceQualityScore : 0,
+      sourcesUsed: result.evidence ? result.evidence.length : 0,
+      evidenceQualityScore: result.evidenceMetrics ? result.evidenceMetrics.evidenceQualityScore : 0,
       research: researchToSave,
       scorecard: result.scorecard,
       challenge: result.challenge,
@@ -238,7 +215,7 @@ class AnalysisService {
 
     return {
       analysisId: saved.id,
-      company: companyData.company,
+      company: result.company,
       createdAt: saved.createdAt,
       analysis: {
         research: result.research,

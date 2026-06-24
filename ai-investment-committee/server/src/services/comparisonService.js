@@ -310,7 +310,7 @@ class ComparisonService {
     let summaryText = "";
     let insightsData = null;
 
-    if (process.env.MOCK_LLM === 'true') {
+    if (true) { // Temporarily disabled Gemini calls for Comparison Service to focus on Analyze flow
       console.log(`[Comparison Service] [MOCK MODE] Constructing mock comparison AI outputs...`);
       summaryText = `${nameA} shows outstanding performance in ${overallScoreA && overallScoreB && overallScoreA > overallScoreB ? 'growth and moat vectors' : 'diversification aspects'}, while ${nameB} scores highly in ${overallScoreA && overallScoreB && overallScoreB > overallScoreA ? 'growth and moat vectors' : 'diversification and risk control'}.`;
       insightsData = this.generateComparisonInsights(nameA, nameB, analysisA, analysisB, normA, normB);
@@ -323,7 +323,8 @@ class ComparisonService {
           const model = new ChatGoogleGenerativeAI({
             model: "gemini-2.5-flash",
             apiKey: apiKey,
-            temperature: 0.2
+            temperature: 0.2,
+            maxRetries: 1
           });
 
           const prompt = getComparisonPrompt(nameA, nameB, analysisA, analysisB);

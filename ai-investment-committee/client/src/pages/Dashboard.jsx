@@ -85,7 +85,7 @@ const Dashboard = () => {
       <div className="max-w-7xl mx-auto space-y-6">
         
         {/* Terminal Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b border-[#1F2937] pb-6 gap-4">
+        <div className="sticky top-0 z-20 bg-[#0A0E17] pt-2 pb-6 border-b border-[#1F2937] flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <h1 className="text-xl font-bold tracking-widest text-white">AI INVESTMENT PORTAL</h1>
             <p className="text-xs text-[#9CA3AF] mt-1 font-sans">

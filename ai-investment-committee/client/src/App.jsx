@@ -12,7 +12,7 @@ import PortfolioBuilder from './pages/PortfolioBuilder';
 function App() {
   return (
     <Router>
-      <div className="flex bg-[#0A0E17] text-slate-100 min-h-screen">
+      <div className="flex bg-[#0A0E17] text-slate-100 h-screen overflow-hidden">
         {/* Bloomberg-style left sidebar */}
         <Sidebar />
         

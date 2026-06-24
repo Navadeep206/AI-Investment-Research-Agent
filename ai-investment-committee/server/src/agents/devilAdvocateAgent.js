@@ -32,7 +32,7 @@ export const runDevilAdvocateAgent = async (companyName, researchReport, scoreca
     return getMockChallenge(companyName);
   }
 
-  const modelName = "gemini-2.5-flash";
+  const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
   if (!apiKey) {
@@ -44,6 +44,7 @@ export const runDevilAdvocateAgent = async (companyName, researchReport, scoreca
     model: modelName,
     apiKey: apiKey,
     temperature: 0.1,
+    maxRetries: 1,
   });
 
   const prompt = getDevilAdvocatePrompt(companyName, researchReport, scorecard);
@@ -59,33 +60,11 @@ export const runDevilAdvocateAgent = async (companyName, researchReport, scoreca
     const parsedData = JSON.parse(cleanedText);
     const validatedData = devilAdvocateSchema.parse(parsedData);
 
-    console.log(`[Devil's Advocate] Challenge compiled successfully on first attempt.`);
+    console.log(`[Devil's Advocate] Challenge compiled successfully.`);
     return validatedData;
-  } catch (firstAttemptError) {
-    console.warn(`[Devil's Advocate] First attempt failed: ${firstAttemptError.message}. Retrying one time with correction prompt...`);
-
-    try {
-      const retryPrompt = `${prompt}
-
-WARNING: Your previous response failed parsing or validation.
-The error encountered was: "${firstAttemptError.message}"
-Raw text received was:
-"${responseText}"
-
-Please correct the response. Return ONLY a valid JSON string that matches the required schema keys. Do not write markdown wraps or explanations.`;
-
-      console.log(`[Devil's Advocate] Dispatching corrected challenge query to Gemini (Attempt 2)...`);
-      const retryResponse = await model.invoke(retryPrompt);
-      const cleanedRetryText = cleanResponseText(retryResponse.content);
-      const parsedRetryData = JSON.parse(cleanedRetryText);
-      const validatedRetryData = devilAdvocateSchema.parse(parsedRetryData);
-
-      console.log(`[Devil's Advocate] Challenge compiled successfully on second attempt.`);
-      return validatedRetryData;
-    } catch (secondAttemptError) {
-      console.error(`[Devil's Advocate] Both attempts failed. Final error: ${secondAttemptError.message}`);
-      throw new Error("Thesis challenge failed due to persistent parsing or validation errors");
-    }
+  } catch (error) {
+    console.error(`[Devil's Advocate] Challenge failed: ${error.message}`);
+    throw error;
   }
 };
 

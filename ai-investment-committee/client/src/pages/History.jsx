@@ -68,7 +68,7 @@ const History = () => {
       <div className="max-w-7xl mx-auto space-y-6">
         
         {/* Header */}
-        <div className="border-b border-[#1F2937] pb-6 flex items-center justify-between">
+        <div className="sticky top-0 z-20 bg-[#0A0E17] pt-2 pb-6 border-b border-[#1F2937] flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold tracking-widest text-white flex items-center gap-3">
               <HistoryIcon className="h-5 w-5 text-[#10B981]" />

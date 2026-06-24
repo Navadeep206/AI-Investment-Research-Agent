@@ -3,7 +3,6 @@ import prisma from '../config/prisma.js';
 import freshnessService from './freshnessService.js';
 import { MAX_ANALYSIS_AGE_HOURS, MIN_DATA_QUALITY } from '../config/cacheConfig.js';
 import executionTracker from './executionTracker.js';
-import materialEventService from './materialEventService.js';
 
 class CacheService {
   constructor() {
@@ -120,46 +119,17 @@ class CacheService {
 
     if (latest) {
       hasRecord = true;
-
-      // 1. Detect material events
-      const eventCheck = await materialEventService.detectMaterialEvents(company, latest.createdAt);
-      if (eventCheck.hasMaterialEvent) {
-        console.log(`[Cache Service] Material event detected for "${company}" since ${latest.createdAt}. Triggering EVENT_REFRESH.`);
-        const fresh = await executeWorkflow(company, null, eventCheck);
-        const formattedFresh = await analysisService.getAnalysisById(fresh.analysisId);
-        this.cacheMisses++;
-        return {
-          analysisId: fresh.analysisId,
-          company: fresh.company,
-          dataSource: "EVENT_REFRESH",
-          cacheReason: "material_event_detected",
-          generatedAt: fresh.createdAt || new Date(),
-          ageHours: 0,
-          freshnessScore: formattedFresh.freshnessScore,
-          evidenceAgeMinutes: formattedFresh.evidenceAgeMinutes,
-          evidenceQualityScore: formattedFresh.evidenceQualityScore,
-          dataQualityScore: formattedFresh.dataQualityScore,
-          recommendationReasonCodes: formattedFresh.recommendationReasonCodes,
-          analysis: {
-            research: formattedFresh.research,
-            scorecard: formattedFresh.scorecard,
-            challenge: formattedFresh.challenge,
-            finalDecision: formattedFresh.finalDecision
-          }
-        };
-      }
-
-      // 2. No material events. Check if cache is complete
       const isComplete = this.isAnalysisComplete(latest);
-      if (isComplete) {
-        console.log(`[Cache Service] Cache HIT for "${company}". No material events detected.`);
+      const isFresh = this.isAnalysisFresh(latest.createdAt);
+      if (isComplete && isFresh) {
+        console.log(`[Cache Service] Cache HIT for "${company}".`);
         this.cacheHits++;
         this.recordCacheHitExecution(sessionId);
         return {
           analysisId: latest.id,
           company: latest.company,
           dataSource: "CACHE",
-          cacheReason: "no_material_change",
+          cacheReason: "fresh_cache",
           generatedAt: latest.createdAt,
           ageHours: this.calculateAgeHours(latest.createdAt),
           freshnessScore: latest.freshnessScore,
@@ -175,7 +145,7 @@ class CacheService {
           }
         };
       } else {
-        isIncomplete = true;
+        isIncomplete = !isComplete;
       }
     }
 
@@ -191,37 +161,9 @@ class CacheService {
         let normalizedLatest = await this.getLatestAnalysis(matchedCompany);
         if (normalizedLatest) {
           hasRecord = true;
-
-          // Detect material events for normalized name
-          const eventCheck = await materialEventService.detectMaterialEvents(matchedCompany, normalizedLatest.createdAt);
-          if (eventCheck.hasMaterialEvent) {
-            console.log(`[Cache Service] Material event detected for normalized "${matchedCompany}" since ${normalizedLatest.createdAt}. Triggering EVENT_REFRESH.`);
-            const fresh = await executeWorkflow(matchedCompany, resolvedCompanyData, eventCheck);
-            const formattedFresh = await analysisService.getAnalysisById(fresh.analysisId);
-            this.cacheMisses++;
-            return {
-              analysisId: fresh.analysisId,
-              company: fresh.company,
-              dataSource: "EVENT_REFRESH",
-              cacheReason: "material_event_detected",
-              generatedAt: fresh.createdAt || new Date(),
-              ageHours: 0,
-              freshnessScore: formattedFresh.freshnessScore,
-              evidenceAgeMinutes: formattedFresh.evidenceAgeMinutes,
-              evidenceQualityScore: formattedFresh.evidenceQualityScore,
-              dataQualityScore: formattedFresh.dataQualityScore,
-              recommendationReasonCodes: formattedFresh.recommendationReasonCodes,
-              analysis: {
-                research: formattedFresh.research,
-                scorecard: formattedFresh.scorecard,
-                challenge: formattedFresh.challenge,
-                finalDecision: formattedFresh.finalDecision
-              }
-            };
-          }
-
           const isComplete = this.isAnalysisComplete(normalizedLatest);
-          if (isComplete) {
+          const isFresh = this.isAnalysisFresh(normalizedLatest.createdAt);
+          if (isComplete && isFresh) {
             console.log(`[Cache Service] Cache HIT for normalized name "${matchedCompany}".`);
             this.cacheHits++;
             this.recordCacheHitExecution(sessionId);
@@ -229,7 +171,7 @@ class CacheService {
               analysisId: normalizedLatest.id,
               company: normalizedLatest.company,
               dataSource: "CACHE",
-              cacheReason: "no_material_change",
+              cacheReason: "fresh_cache",
               generatedAt: normalizedLatest.createdAt,
               ageHours: this.calculateAgeHours(normalizedLatest.createdAt),
               freshnessScore: normalizedLatest.freshnessScore,
@@ -245,7 +187,7 @@ class CacheService {
               }
             };
           } else {
-            isIncomplete = true;
+            isIncomplete = !isComplete;
           }
         }
       }
@@ -320,23 +262,15 @@ class CacheService {
 
     if (latest) {
       hasRecord = true;
-
-      // 1. Detect material events
-      const eventCheck = await materialEventService.detectMaterialEvents(company, latest.createdAt);
-      if (eventCheck.hasMaterialEvent) {
-        console.log(`[Cache Service] Comparison query: Material event detected for "${company}". Refreshing cache...`);
-        const fresh = await executeWorkflow(company, null, eventCheck);
-        return await analysisService.getAnalysisById(fresh.analysisId);
-      }
-
       const isComplete = this.isAnalysisComplete(latest);
-      if (isComplete) {
+      const isFresh = this.isAnalysisFresh(latest.createdAt);
+      if (isComplete && isFresh) {
         console.log(`[Cache Service] Comparison query: Cache HIT for "${company}".`);
         this.cacheHits++;
         this.recordCacheHitExecution(sessionId);
         return latest;
       } else {
-        isIncomplete = true;
+        isIncomplete = !isComplete;
       }
     }
 
@@ -350,23 +284,15 @@ class CacheService {
         let normalizedLatest = await this.getLatestAnalysis(matchedCompany);
         if (normalizedLatest) {
           hasRecord = true;
-
-          // Detect material events for normalized name
-          const eventCheck = await materialEventService.detectMaterialEvents(matchedCompany, normalizedLatest.createdAt);
-          if (eventCheck.hasMaterialEvent) {
-            console.log(`[Cache Service] Comparison query: Material event detected for normalized "${matchedCompany}". Refreshing cache...`);
-            const fresh = await executeWorkflow(matchedCompany, resolvedCompanyData, eventCheck);
-            return await analysisService.getAnalysisById(fresh.analysisId);
-          }
-
           const isComplete = this.isAnalysisComplete(normalizedLatest);
-          if (isComplete) {
+          const isFresh = this.isAnalysisFresh(normalizedLatest.createdAt);
+          if (isComplete && isFresh) {
             console.log(`[Cache Service] Comparison query: Cache HIT for normalized name "${matchedCompany}".`);
             this.cacheHits++;
             this.recordCacheHitExecution(sessionId);
             return normalizedLatest;
           } else {
-            isIncomplete = true;
+            isIncomplete = !isComplete;
           }
         }
       }

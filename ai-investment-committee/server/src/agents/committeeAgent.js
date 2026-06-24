@@ -1,7 +1,6 @@
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { getCommitteePrompt } from "../prompts/committeePrompt.js";
 import { committeeSchema } from "../schemas/committeeSchema.js";
-import confidenceService from "../services/confidenceService.js";
 
 /**
  * Helper to strip markdown code blocks (e.g. ```json ... ```) if returned by the LLM.
@@ -38,7 +37,7 @@ export const runCommitteeAgent = async (
   let decision;
 
   const getDecisionFromLLM = async () => {
-    const modelName = "gemini-2.5-flash";
+    const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
     const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
     if (!apiKey) {
@@ -49,6 +48,7 @@ export const runCommitteeAgent = async (
       model: modelName,
       apiKey: apiKey,
       temperature: 0.1,
+      maxRetries: 1,
     });
 
     const prompt = getCommitteePrompt(research, scorecard, challenge, sourcesUsed, evidenceMetrics);
@@ -62,23 +62,9 @@ export const runCommitteeAgent = async (
       const cleanedText = cleanResponseText(responseText);
       const parsedData = JSON.parse(cleanedText);
       return committeeSchema.parse(parsedData);
-    } catch (firstAttemptError) {
-      console.warn(`[Committee Agent] First attempt failed: ${firstAttemptError.message}. Retrying one time with correction prompt...`);
-
-      const retryPrompt = `${prompt}
-
-WARNING: Your previous response failed parsing or validation.
-The error encountered was: "${firstAttemptError.message}"
-Raw text received was:
-"${responseText}"
-
-Please correct the response. Return ONLY a valid JSON string that matches the required schema keys. Do not write markdown wraps or explanations.`;
-
-      console.log(`[Committee Agent] Dispatching corrected final decision query to Gemini (Attempt 2)...`);
-      const retryResponse = await model.invoke(retryPrompt);
-      const cleanedRetryText = cleanResponseText(retryResponse.content);
-      const parsedRetryData = JSON.parse(cleanedRetryText);
-      return committeeSchema.parse(parsedRetryData);
+    } catch (error) {
+      console.error(`[Committee Agent] Final decision review failed: ${error.message}`);
+      throw error;
     }
   };
 
@@ -132,7 +118,9 @@ Please correct the response. Return ONLY a valid JSON string that matches the re
   const failedNodesCount = Array.isArray(failedNodes) ? failedNodes.length : 0;
   const dataQualityScore = Math.max(0, 100 - (failedNodesCount * 20));
 
-  // 2.1 Calculate Agent Agreement Score
+  const evidenceQualityVal = evidenceMetrics ? Number(evidenceMetrics.evidenceQualityScore || 0) : 80;
+
+  // 2.1 Compute agent consensus metrics for telemetry breakdown
   let agentAgreementScore = 100;
   const scoringRec = scorecard ? scorecard.recommendation : null;
   const committeeRec = decision.recommendation;
@@ -153,71 +141,15 @@ Please correct the response. Return ONLY a valid JSON string that matches the re
     }
   }
 
-  // 2.2 Calculate Calibrated Confidence
-  const riskVal = scorecard ? Number(scorecard.riskLevel || 50) : 50;
-  const evidenceQualityVal = evidenceMetrics ? Number(evidenceMetrics.evidenceQualityScore || 0) : 80;
-  
-  const calibrated = confidenceService.calculateConfidence(evidenceQualityVal, dataQualityScore, agentAgreementScore);
-  decision.confidence = calibrated.confidence;
-  decision.confidenceBreakdown = calibrated.confidenceBreakdown;
+  // Populate confidence breakdown telemetry details without overriding the raw Gemini confidence score
+  decision.confidenceBreakdown = {
+    evidenceQuality: evidenceQualityVal,
+    dataQuality: dataQualityScore,
+    agentAgreement: agentAgreementScore
+  };
 
-  // 3. Programmatically Enforce recommendation Reason Codes & Guardrails
-  const recommendationReasonCodes = [];
-  const overrideReasons = [];
-
-  // Rule 3.1: Source Trust - Tier A Influence (Feature 3)
-  if (evidenceMetrics) {
-    if (evidenceMetrics.tierA === 0) {
-      if (scorecard) {
-        // Cap overallScore to 65 since Tier B/C/D cannot influence numeric scores above 65
-        scorecard.overallScore = Math.min(scorecard.overallScore || 50, 65);
-      }
-      recommendationReasonCodes.push('NO_TIER_A_SOURCES');
-      overrideReasons.push('Overall score capped at 65 and recommendation capped at WATCH because there are no Tier A sources.');
-      if (decision.recommendation === 'INVEST') {
-        decision.recommendation = 'WATCH';
-      }
-    }
-
-    // Rule 3.2: Source Trust - Tier C/D Confidence Cap (Feature 3)
-    if (evidenceMetrics.tierC + evidenceMetrics.tierD > 0) {
-      if (decision.confidence > 75) {
-        decision.confidence = 75;
-        recommendationReasonCodes.push('TIER_C_D_CONFIDENCE_CAP');
-        overrideReasons.push('Recommendation confidence capped at 75 due to presence of low-credibility Tier C/D evidence.');
-      }
-    }
-  }
-
-  // Rule 3.3: Recommendation Guardrails (Feature 2)
-  if (decision.recommendation === 'INVEST') {
-    if (riskVal > 85) {
-      decision.recommendation = 'WATCH';
-      recommendationReasonCodes.push('HIGH_RISK');
-      overrideReasons.push(`Recommendation overridden to WATCH because risk level (${riskVal}) exceeds maximum safety limit of 85.`);
-    }
-    
-    if (evidenceQualityVal < 70) {
-      decision.recommendation = 'WATCH';
-      recommendationReasonCodes.push('LOW_EVIDENCE_QUALITY');
-      overrideReasons.push(`Recommendation overridden to WATCH because evidence quality (${evidenceQualityVal}) is below minimum safety threshold of 70.`);
-    }
-
-    if (dataQualityScore < 90) {
-      decision.recommendation = 'WATCH';
-      recommendationReasonCodes.push('LOW_DATA_QUALITY');
-      overrideReasons.push(`Recommendation overridden to WATCH because data quality rating (${dataQualityScore}) is below safety limit of 90.`);
-    }
-  }
-
-  // 4. Update decision fields with audit trail details (Feature 4 & 7)
-  if (overrideReasons.length > 0) {
-    decision.decisionOverrideReason = decision.decisionOverrideReason
-      ? `${decision.decisionOverrideReason}; ${overrideReasons.join('; ')}`
-      : overrideReasons.join('; ');
-  }
-
-  decision.recommendationReasonCodes = recommendationReasonCodes;
+  // Keep metadata attributes intact for schema / DB compatibility without modifying raw decision scores
+  decision.recommendationReasonCodes = [];
   decision.dataQualityScore = dataQualityScore;
   decision.evidenceQualityScore = evidenceQualityVal;
   decision.freshnessScore = 100; // Live at run time
