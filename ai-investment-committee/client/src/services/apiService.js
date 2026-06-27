@@ -25,6 +25,7 @@ class ApiService {
   async getAnalysis(id) {
     try {
       const response = await api.get(`/history/${id}`);
+      console.log("apiService.js getAnalysis response:", response);
       return response.analysis || null;
     } catch (error) {
       console.error(`[ApiService] Failed to get analysis details for ID ${id}:`, error);
@@ -53,6 +54,7 @@ class ApiService {
   async analyzeCompany(companyName, sessionId = null) {
     try {
       const response = await api.post('/analyze', { company: companyName, sessionId });
+      console.log("apiService.js analyzeCompany response:", response);
       return response; // Contains success, analysisId, company, dataSource, ageHours, analysis
     } catch (error) {
       console.error(`[ApiService] Failed to analyze company "${companyName}":`, error);

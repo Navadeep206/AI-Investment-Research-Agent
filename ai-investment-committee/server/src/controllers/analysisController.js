@@ -7,7 +7,7 @@ import cacheService from '../services/cacheService.js';
  */
 export const analyzeCompany = async (req, res, next) => {
   try {
-    const { company, sessionId } = req.body;
+    const { company, sessionId, forceRefresh, refresh } = req.body;
 
     // Validate request body parameter
     if (!company || typeof company !== 'string' || !company.trim()) {
@@ -33,8 +33,14 @@ export const analyzeCompany = async (req, res, next) => {
     };
 
     // Run cache service wrapper coordinator
-    const result = await cacheService.getOrRefreshAnalysis(companyQueryName, executeWorkflow, sessionId);
+    const result = await cacheService.getOrRefreshAnalysis(
+      companyQueryName,
+      executeWorkflow,
+      sessionId,
+      forceRefresh === true || refresh === true
+    );
 
+    console.log("Analysis Controller Output Score", result.evidenceQualityScore);
     // Return cached or fresh analysis response matching spec (standardizer will wrap this)
     return res.status(200).json({
       analysisId: result.analysisId,

@@ -42,11 +42,12 @@ class EvidenceService {
         console.log(`[Evidence Service] Executing Tavily query: "${query}"`);
         const docs = await retriever.invoke(query);
 
-        // Standardize structure to: { title, url, content }
+        // Standardize structure: preserve Tavily relevance score for dynamic confidence
         return docs.map((doc) => ({
-          title: doc.metadata.title || "Search Result",
-          url: doc.metadata.source || "",
-          content: doc.pageContent || ""
+          title: doc.metadata.title || 'Search Result',
+          url: doc.metadata.source || '',
+          content: doc.pageContent || '',
+          tavilyScore: doc.metadata.score || doc.metadata.relevance_score || null
         }));
       } catch (err) {
         console.error(`[Evidence Service] Query failed: "${query}":`, err.message);
@@ -82,7 +83,18 @@ class EvidenceService {
         claim: claim,
         source: sourceName,
         url: res.url,
-        confidence: 80 // Default standard confidence score
+        confidence: (() => {
+          // Use Tavily's relevance score (0.0–1.0) scaled to 50–100
+          if (res.tavilyScore != null && res.tavilyScore > 0) {
+            return Math.round(50 + (res.tavilyScore * 50));
+          }
+          // Fallback: content richness proxy
+          const contentLen = (res.content || '').length;
+          if (contentLen >= 400) return 85;
+          if (contentLen >= 200) return 75;
+          if (contentLen >= 100) return 65;
+          return 55;
+        })()
       };
     });
 

@@ -21,6 +21,13 @@ export default (req, res, next) => {
     };
 
     if (isSuccess) {
+      if (body) {
+        if (body.evidenceQualityScore !== undefined) {
+          console.log("API JSON Response - evidenceQualityScore:", body.evidenceQualityScore);
+        } else if (body.analysis && body.analysis.evidenceQualityScore !== undefined) {
+          console.log("API JSON Response - analysis.evidenceQualityScore:", body.analysis.evidenceQualityScore);
+        }
+      }
       formatted.data = body;
     } else {
       formatted.error = {

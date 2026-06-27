@@ -21,15 +21,25 @@ const runTests = async () => {
     console.log(`Test server booted successfully on port ${PORT}`);
 
     try {
-      // Clean up previous test analyses for "NVIDIA"
-      await prisma.analysis.deleteMany({
-        where: {
-          company: {
-            contains: "NVIDIA",
-            mode: "insensitive"
+      // Clean up previous test analyses and evidence cache for "NVIDIA"
+      await Promise.all([
+        prisma.analysis.deleteMany({
+          where: {
+            company: {
+              contains: "NVIDIA",
+              mode: "insensitive"
+            }
           }
-        }
-      });
+        }),
+        prisma.evidenceCache.deleteMany({
+          where: {
+            companyName: {
+              contains: "NVIDIA",
+              mode: "insensitive"
+            }
+          }
+        })
+      ]);
 
       // --- TEST 1: Health Endpoint Telemetry Upgrade ---
       console.log("\n--- TEST 1: UPGRADED HEALTH ENDPOINT ---");
@@ -106,13 +116,26 @@ const runTests = async () => {
 
       // --- TEST 4: Cache Expiration & FRESH_ANALYSIS ---
       console.log("\n--- TEST 4: CACHE EXPIRATION ---");
-      // Simulate that the analysis was generated 25 hours ago (beyond the 24 hours limit)
-      await prisma.analysis.update({
-        where: { id: a1.analysisId },
-        data: {
-          createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000) // 25 hours ago
-        }
-      });
+      // Simulate that the analysis and evidence cache were generated 25 hours ago (beyond the 24 hours limit)
+      await Promise.all([
+        prisma.analysis.update({
+          where: { id: a1.analysisId },
+          data: {
+            createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000) // 25 hours ago
+          }
+        }),
+        prisma.evidenceCache.updateMany({
+          where: {
+            companyName: {
+              contains: "NVIDIA",
+              mode: "insensitive"
+            }
+          },
+          data: {
+            expiresAt: new Date(Date.now() - 1000) // expired
+          }
+        })
+      ]);
 
       const analysisRes3 = await axios.post(`${BASE_URL}/api/analyze`, {
         company: "NVIDIA",

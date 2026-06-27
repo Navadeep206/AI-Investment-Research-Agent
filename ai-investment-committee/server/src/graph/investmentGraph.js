@@ -52,9 +52,22 @@ const GraphState = Annotation.Root({
 const evidenceNode = async (state) => {
   const reqId = state.requestId || 'N/A';
   console.log(`[Evidence Service] [${reqId}] Running Evidence Collection Node...`);
+
+  if (state.companyData && state.evidence && state.evidenceMetrics) {
+    console.log(`[Evidence Service] [${reqId}] Reusing cached/pre-provided evidence and companyData for "${state.company}".`);
+    console.log("Evidence Service Output (Cached)", state.evidenceMetrics.evidenceQualityScore);
+    return {
+      companyData: state.companyData,
+      company: state.company,
+      evidence: state.evidence,
+      evidenceMetrics: state.evidenceMetrics,
+    };
+  }
+
   const { default: evidenceService } = await import('../services/evidenceService.js');
   const { default: sourceRankingService } = await import('../services/sourceRankingService.js');
   const { default: companyResearchService } = await import('../services/companyResearchService.js');
+  const { default: cacheService } = await import('../services/cacheService.js');
 
   // Gather Wikipedia & Yahoo Finance data and Tavily search in parallel to optimize latency
   const [companyData, evidenceData] = await Promise.all([
@@ -63,10 +76,22 @@ const evidenceNode = async (state) => {
   ]);
 
   const { rankedEvidence, metrics } = sourceRankingService.rankEvidence(evidenceData);
+  const normalizedCompany = companyData.company;
 
+  try {
+    await cacheService.saveEvidenceToCache(normalizedCompany, {
+      companyData,
+      evidence: rankedEvidence,
+      evidenceMetrics: metrics
+    });
+  } catch (err) {
+    console.error(`[Evidence Service] [${reqId}] Failed to save evidence to cache for "${normalizedCompany}":`, err.message);
+  }
+
+  console.log("Evidence Service Output", metrics.evidenceQualityScore);
   return {
     companyData,
-    company: companyData.company, // Normalize company name
+    company: normalizedCompany, // Normalize company name
     evidence: rankedEvidence,
     evidenceMetrics: metrics,
   };
@@ -77,6 +102,7 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const researchNode = async (state) => {
   const reqId = state.requestId || 'N/A';
   console.log(`[Research Agent] [${reqId}] Running Research Node...`);
+  console.log("Research Agent Input Score", state.evidenceMetrics ? state.evidenceMetrics.evidenceQualityScore : "N/A");
   if (!state.companyData) {
     throw new Error("Missing companyData in graph state");
   }
@@ -102,6 +128,7 @@ const researchNode = async (state) => {
 const scoringNode = async (state) => {
   const reqId = state.requestId || 'N/A';
   console.log(`[Scoring Agent] [${reqId}] Pacing call and running Scoring Node...`);
+  console.log("Scoring Agent Input Score", state.evidenceMetrics ? state.evidenceMetrics.evidenceQualityScore : "N/A");
   await sleep(1500); // Prevent 429/503 on Free Tier API keys by pacing requests
   if (!state.company || !state.research) {
     throw new Error("Missing company name or research report in graph state");
@@ -154,6 +181,7 @@ const devilAdvocateNode = async (state) => {
 const committeeNode = async (state) => {
   const reqId = state.requestId || 'N/A';
   console.log(`[Committee Agent] [${reqId}] Pacing call and running Committee Node...`);
+  console.log("Committee Agent Input Score", state.evidenceMetrics ? state.evidenceMetrics.evidenceQualityScore : "N/A");
   await sleep(1500); // Prevent 429/503 on Free Tier API keys by pacing requests
   if (!state.research || !state.scorecard || !state.challenge) {
     throw new Error("Missing research, scorecard, or challenge report in graph state");

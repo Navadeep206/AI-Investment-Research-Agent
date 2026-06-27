@@ -31,3 +31,14 @@ model Analysis {
   agentMetrics         Json?
   createdAt            DateTime @default(now())
 }
+
+model EvidenceCache {
+  id                 String   @id @default(cuid())
+  companyName        String   @unique
+  normalizedEvidence Json
+  sources            Json
+  retrievedAt        DateTime @default(now())
+  expiresAt          DateTime
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}

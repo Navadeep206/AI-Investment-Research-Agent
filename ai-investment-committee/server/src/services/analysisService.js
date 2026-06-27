@@ -162,13 +162,10 @@ class AnalysisService {
    * @param {string} companyQueryName The target company name
    * @returns {Promise<Object>} Formatted object matching executeWorkflow expectations
    */
-  async runFullAnalysisAndSave(companyQueryName, preFetchedCompanyData = null, sessionId = null, requestId = null, eventMetricsData = null) {
+  async runFullAnalysisAndSave(companyQueryName, cachedEvidence = null, sessionId = null, requestId = null, eventMetricsData = null) {
     const { investmentGraph } = await import('../graph/investmentGraph.js');
 
-    // If we have pre-fetched data (e.g. from cache normalization), we can skip the graph's research node.
-    // However, for simplicity and to fit the new graph structure, we will always start from the query name.
-    // The graph now handles all data fetching.
-    const resolvedCompanyQuery = preFetchedCompanyData ? preFetchedCompanyData.company : companyQueryName;
+    const resolvedCompanyQuery = cachedEvidence?.companyData?.company || companyQueryName;
 
     // Step 1: Run the LangGraph StateGraph workflow
     console.log(`[Analysis Service] Invoking LangGraph workflow for "${resolvedCompanyQuery}"...`);
@@ -178,6 +175,9 @@ class AnalysisService {
     }
     const result = await investmentGraph.invoke({
       company: resolvedCompanyQuery, // Start with the query name
+      companyData: cachedEvidence?.companyData || null,
+      evidence: cachedEvidence?.evidence || null,
+      evidenceMetrics: cachedEvidence?.evidenceMetrics || null,
       sessionId: sessionId,
       requestId: requestId
     });
@@ -201,7 +201,9 @@ class AnalysisService {
       recommendation: result.finalDecision ? result.finalDecision.recommendation : null,
       confidence: result.finalDecision ? result.finalDecision.confidence : null,
       sourcesUsed: result.evidence ? result.evidence.length : 0,
-      evidenceQualityScore: result.evidenceMetrics ? result.evidenceMetrics.evidenceQualityScore : 0,
+      evidenceQualityScore: result.evidenceMetrics
+        ? result.evidenceMetrics.evidenceQualityScore
+        : (result.finalDecision?.evidenceQualityScore ?? 0),
       research: researchToSave,
       scorecard: result.scorecard,
       challenge: result.challenge,
@@ -213,6 +215,7 @@ class AnalysisService {
       lastMaterialEventAt: eventMetricsData ? eventMetricsData.latestEventTimestamp : null
     });
 
+    console.log("Analysis Service Saved Score", saved.evidenceQualityScore);
     return {
       analysisId: saved.id,
       company: result.company,

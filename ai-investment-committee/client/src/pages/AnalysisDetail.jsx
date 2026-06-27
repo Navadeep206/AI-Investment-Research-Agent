@@ -14,9 +14,11 @@ import {
   Printer,
   Calendar,
   Layers,
-  Database
+  Database,
+  Sparkles
 } from 'lucide-react';
 import apiService from '../services/apiService';
+import DecisionTimeline from '../components/DecisionTimeline';
 
 const AnalysisDetail = () => {
   const { id } = useParams();
@@ -25,6 +27,7 @@ const AnalysisDetail = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [downloading, setDownloading] = useState(false);
+  const [activeTab, setActiveTab] = useState('timeline');
 
   const handleDownloadPDF = async () => {
     try {
@@ -63,6 +66,7 @@ const AnalysisDetail = () => {
         if (!data) {
           setError('Analysis record not found.');
         } else {
+          console.log("AnalysisDetail.jsx fetched data:", data);
           setRecord(data);
         }
       } catch (err) {
@@ -107,10 +111,10 @@ const AnalysisDetail = () => {
 
   if (error || !record) {
     return (
-      <div className="bg-[#0A0E17] min-h-screen text-slate-100 p-6 sm:p-8 font-mono space-y-6">
-        <Link to="/history" className="inline-flex items-center space-x-2 text-xs text-[#10B981] hover:underline">
+      <div className="bg-[#0A0E17] min-h-screen text-slate-100 p-6 sm:p-8 font-sans space-y-6">
+        <Link to="/history" className="inline-flex items-center space-x-2 text-xs text-[#10B981] hover:underline font-sans font-semibold">
           <ArrowLeft className="h-4 w-4" />
-          <span>BACK TO HISTORY</span>
+          <span>Back to History</span>
         </Link>
         <div className="border border-[#EF4444]/40 bg-[#EF4444]/5 p-6 text-[#EF4444] text-xs max-w-xl mx-auto flex items-start space-x-3.5">
           <AlertTriangle className="h-6 w-6 shrink-0" />
@@ -124,46 +128,78 @@ const AnalysisDetail = () => {
   }
 
   return (
-    <div className="bg-[#0A0E17] min-h-screen text-slate-100 p-6 sm:p-8 font-mono terminal-grid">
+    <div className="bg-[#0A0E17] min-h-screen text-slate-100 p-6 sm:p-8 font-sans terminal-grid">
       <div className="max-w-7xl mx-auto space-y-6">
         
         {/* Navigation / Actions Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-[#1F2937] pb-6">
-          <Link to="/history" className="inline-flex items-center space-x-2 text-xs text-[#10B981] hover:underline">
+          <Link to="/history" className="inline-flex items-center space-x-2 text-xs text-[#10B981] hover:underline font-sans font-semibold">
             <ArrowLeft className="h-4 w-4" />
-            <span>BACK TO HISTORY</span>
+            <span>Back to History</span>
           </Link>
           <div className="flex items-center space-x-3">
-            <button
-              onClick={handleDownloadPDF}
-              disabled={downloading}
-              className="flex items-center space-x-2 border border-[#1F2937] bg-[#111827] px-4 py-2 hover:bg-[#1F2937] transition-all text-xs font-bold text-slate-300 disabled:opacity-50"
-            >
-              {downloading ? (
-                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Download className="h-3.5 w-3.5" />
-              )}
-              <span>{downloading ? 'GENERATING PDF...' : 'DOWNLOAD PDF'}</span>
-            </button>
-            <button
-              onClick={() => window.print()}
-              className="flex items-center space-x-2 border border-[#1F2937] bg-[#111827] px-4 py-2 hover:bg-[#1F2937] transition-all text-xs font-bold text-slate-300"
-            >
-              <Printer className="h-3.5 w-3.5" />
-              <span>PRINT MEMO</span>
-            </button>
-          </div>
+             <button
+               type="button"
+               onClick={handleDownloadPDF}
+               disabled={downloading}
+               className="flex items-center space-x-2 border border-[#1F2937] bg-[#111827] px-4 py-2 hover:bg-[#1F2937] transition-all duration-150 text-xs font-semibold text-slate-300 disabled:opacity-50 rounded-none cursor-pointer"
+             >
+               {downloading ? (
+                 <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+               ) : (
+                 <Download className="h-3.5 w-3.5" />
+               )}
+               <span>{downloading ? 'Generating PDF...' : 'Download PDF'}</span>
+             </button>
+             <button
+               type="button"
+               onClick={() => window.print()}
+               className="flex items-center space-x-2 border border-[#1F2937] bg-[#111827] px-4 py-2 hover:bg-[#1F2937] transition-all duration-150 text-xs font-semibold text-slate-300 rounded-none cursor-pointer"
+             >
+               <Printer className="h-3.5 w-3.5" />
+               <span>Print Memo</span>
+             </button>
+           </div>
         </div>
 
-        {/* Corporate Profile Header */}
-        <div className="bg-[#111827] border border-[#1F2937] p-6 space-y-4">
+        {/* View Toggle Tabs */}
+        <div className="flex border-b border-[#1F2937] gap-2 mb-4">
+           <button
+             type="button"
+             onClick={() => setActiveTab('timeline')}
+             className={`px-4 py-2 border-t-2 text-[10px] font-semibold tracking-wider transition-all duration-150 uppercase cursor-pointer rounded-none ${
+               activeTab === 'timeline'
+                 ? 'border-[#10B981] bg-[#111827] text-white'
+                 : 'border-transparent text-[#9CA3AF] hover:text-white hover:bg-[#111827]/40'
+             }`}
+           >
+             AI Decision Timeline
+           </button>
+           <button
+             type="button"
+             onClick={() => setActiveTab('dashboard')}
+             className={`px-4 py-2 border-t-2 text-[10px] font-semibold tracking-wider transition-all duration-150 uppercase cursor-pointer rounded-none ${
+               activeTab === 'dashboard'
+                 ? 'border-[#10B981] bg-[#111827] text-white'
+                 : 'border-transparent text-[#9CA3AF] hover:text-white hover:bg-[#111827]/40'
+             }`}
+           >
+             Executive Dashboard
+          </button>
+        </div>
+
+        {activeTab === 'timeline' ? (
+          <DecisionTimeline record={record} />
+        ) : (
+          <>
+            {/* Corporate Profile Header */}
+            <div className="bg-[#111827] border border-[#1F2937] p-6 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <div className="text-[9px] bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30 px-2.5 py-0.5 font-bold uppercase inline-block">
-                POSTGRESQL AUDITED REPORT
+              <div className="text-[9px] bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30 px-2.5 py-0.5 font-bold uppercase inline-block font-mono">
+                PostgreSQL Audited Report
               </div>
-              <h2 className="text-2xl font-black text-white tracking-wider mt-2 uppercase">{record.company}</h2>
+              <h2 className="text-2xl font-semibold text-white tracking-wide mt-2">{record.company}</h2>
               <div className="text-xs text-[#9CA3AF] flex flex-wrap gap-x-6 gap-y-1.5 font-sans mt-1">
                 <span>SECTOR: <strong className="text-white font-mono">{record.industry || 'N/A'}</strong></span>
                 <span>CAPITALIZATION: <strong className="text-white font-mono">{record.marketCap || 'N/A'}</strong></span>
@@ -179,6 +215,56 @@ const AnalysisDetail = () => {
                 <Calendar className="h-3.5 w-3.5 text-[#9CA3AF]" />
                 <span>FILED: {new Date(record.createdAt).toLocaleString()}</span>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* CORE COMMITTEE TELEMETRY GRID (Requirement 6) */}
+        <div className="bg-[#111827] border border-[#1F2937] p-5 space-y-4">
+          <h3 className="text-[20px] font-semibold text-white tracking-normal flex items-center gap-1.5 border-b border-[#1F2937] pb-3">
+            <Sparkles className="h-4 w-4 text-[#10B981]" />
+            Committee Verdict & Core Telemetry
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 font-mono">
+            <div className="border border-[#1F2937] bg-[#0A0E17] p-4 flex flex-col justify-between h-24 text-left">
+              <span className="text-[9px] font-bold text-[#9CA3AF] tracking-wider uppercase">Overall Score</span>
+              <strong className="text-2xl font-black text-white leading-none">{record.overallScore ?? record.scorecard?.overallScore ?? 'N/A'}/100</strong>
+            </div>
+
+            <div className="border border-[#1F2937] bg-[#0A0E17] p-4 flex flex-col justify-between h-24 text-left">
+              <span className="text-[9px] font-bold text-[#9CA3AF] tracking-wider uppercase">Business Quality</span>
+              <strong className="text-2xl font-black text-white leading-none">{record.scorecard?.businessQuality ?? 'N/A'}/100</strong>
+            </div>
+
+            <div className="border border-[#1F2937] bg-[#0A0E17] p-4 flex flex-col justify-between h-24 text-left">
+              <span className="text-[9px] font-bold text-[#9CA3AF] tracking-wider uppercase">Risk Level</span>
+              <strong className={`text-2xl font-black leading-none ${
+                (record.scorecard?.riskLevel ?? 0) <= 35 ? 'text-[#10B981]' : 
+                (record.scorecard?.riskLevel ?? 0) <= 65 ? 'text-[#F59E0B]' : 'text-[#EF4444]'
+              }`}>{record.scorecard?.riskLevel ?? 'N/A'}/100</strong>
+            </div>
+
+            <div className="border border-[#1F2937] bg-[#0A0E17] p-4 flex flex-col justify-between h-24 text-left">
+              <span className="text-[9px] font-bold text-[#9CA3AF] tracking-wider uppercase">Evidence Quality</span>
+              <strong className="text-2xl font-black text-[#10B981] leading-none">
+                {record.evidenceQualityScore != null
+                  ? `${record.evidenceQualityScore}/100`
+                  : record.finalDecision?.evidenceQualityScore != null
+                    ? `${record.finalDecision.evidenceQualityScore}/100`
+                    : 'N/A'}
+              </strong>
+            </div>
+
+            <div className="border border-[#1F2937] bg-[#0A0E17] p-4 flex flex-col justify-between h-24 text-left">
+              <span className="text-[9px] font-bold text-[#9CA3AF] tracking-wider uppercase">Confidence</span>
+              <strong className="text-2xl font-black text-white leading-none">{record.confidence ?? 0}%</strong>
+            </div>
+
+            <div className="border border-[#1F2937] bg-[#0A0E17] p-4 flex flex-col justify-between h-24 text-left">
+              <span className="text-[9px] font-bold text-[#9CA3AF] tracking-wider uppercase">Recommendation</span>
+              <span className={`text-xs font-bold py-1 border inline-block text-center mt-1 uppercase ${getRecColor(record.recommendation)}`}>
+                {record.recommendation || 'WATCH'}
+              </span>
             </div>
           </div>
         </div>
@@ -371,8 +457,12 @@ const AnalysisDetail = () => {
             <div className="relative h-24 w-24 flex items-center justify-center">
               <div className="absolute inset-0 rounded-full border-4 border-[#1F2937]" />
               <div className="absolute inset-0 rounded-full border-4 border-t-[#10B981] border-r-[#10B981] border-b-[#1F2937] border-l-[#1F2937]" />
-              <div className="text-center font-mono">
-                <span className="text-2xl font-black text-white">{record.evidenceQualityScore ?? record.finalDecision?.evidenceQualityScore ?? 0}</span>
+            <div className="text-center font-mono">
+                <span className="text-xl font-black text-white">
+                  {(record.evidenceQualityScore ?? record.finalDecision?.evidenceQualityScore) != null
+                    ? `${record.evidenceQualityScore ?? record.finalDecision?.evidenceQualityScore}`
+                    : 'N/A'}
+                </span>
                 <span className="text-[9px] text-[#9CA3AF] block font-sans">/100 RATING</span>
               </div>
             </div>
@@ -392,49 +482,53 @@ const AnalysisDetail = () => {
                   <tr className="border-b border-[#1F2937] text-[#9CA3AF]">
                     <th className="py-2 font-bold">SOURCE</th>
                     <th className="py-2 font-bold">TIER</th>
-                    <th className="py-2 font-bold text-center">CONFIDENCE</th>
+                    <th className="py-2 font-bold text-center">CONF.</th>
                     <th className="py-2 font-bold">CLAIM SUMMARY</th>
-                    <th className="py-2 font-bold text-right">URL</th>
+                    <th className="py-2 font-bold">PUBLISHED TIME</th>
+                    <th className="py-2 font-bold text-right">ACTION</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#1F2937]/50">
-                  {[
-                    { source: 'SEC Edgar Database', tier: 'Tier A', confidence: 98, claim: `Form 10-K filings audit for sector operations reporting on ${record.company}.`, url: 'https://sec.gov' },
-                    { source: 'Bloomberg Terminal', tier: 'Tier A', confidence: 95, claim: `${record.company} equity price-to-earnings growth multiple metrics.`, url: 'https://bloomberg.com' },
-                    { source: 'Reuters Finance', tier: 'Tier A', confidence: 92, claim: `Market supply chain vectors and macro headwind analysis for ${record.company}.`, url: 'https://reuters.com' },
-                    { source: 'Morningstar Vetting', tier: 'Tier B', confidence: 85, claim: `Capital allocation metrics, cash flows, and credit ratios checks.`, url: 'https://morningstar.com' },
-                    { source: 'Seeking Alpha', tier: 'Tier B', confidence: 80, claim: `Competitive peer comparison and gross profit margin benchmark vectors.`, url: 'https://seekingalpha.com' }
-                  ].slice(0, record.sourcesUsed || 5).map((item, idx) => (
-                    <tr key={idx} className="hover:bg-[#1F2937]/30 text-slate-300 hover:text-white">
-                      <td className="py-2.5 font-bold text-white">{item.source}</td>
-                      <td className="py-2.5">
-                        <span className={`px-1.5 py-0.5 border text-[8px] font-bold ${getEvidenceTierColor(item.tier)}`}>
-                          {item.tier}
-                        </span>
-                      </td>
-                      <td className="py-2.5 text-center font-bold text-slate-200">{item.confidence}%</td>
-                      <td className="py-2.5 text-[#9CA3AF] truncate max-w-[200px]" title={item.claim}>{item.claim}</td>
-                      <td className="py-2.5 text-right">
-                        <a 
-                          href={item.url} 
-                          target="_blank" 
-                          rel="noreferrer" 
-                          className="inline-flex items-center text-[#10B981] hover:underline"
-                        >
-                          LINK <ExternalLink className="h-3 w-3 ml-0.5" />
-                        </a>
-                      </td>
+                  {record.research?.evidence && Array.isArray(record.research.evidence) && record.research.evidence.length > 0 ? (
+                    record.research.evidence.map((item, idx) => (
+                      <tr key={idx} className="hover:bg-[#1F2937]/30 text-slate-300 hover:text-white">
+                        <td className="py-2.5 font-bold text-white max-w-[120px] truncate">{item.source}</td>
+                        <td className="py-2.5">
+                          <span className={`px-1.5 py-0.5 border text-[8px] font-bold ${getEvidenceTierColor(item.tier)}`}>
+                            {item.tier}
+                          </span>
+                        </td>
+                        <td className="py-2.5 text-center font-bold text-slate-200">{item.confidence}%</td>
+                        <td className="py-2.5 max-w-[200px] break-words whitespace-pre-wrap" title={item.claim}>{item.claim}</td>
+                        <td className="py-2.5 text-[#9CA3AF] font-mono text-[10px] whitespace-nowrap">
+                          {item.publishedTime || item.publishedDate || 'N/A'}
+                        </td>
+                        <td className="py-2.5 text-right">
+                          <a 
+                            href={item.url} 
+                            target="_blank" 
+                            rel="noreferrer" 
+                            className="inline-flex items-center text-[#10B981] hover:underline text-[9.5px] font-bold border border-[#10B981]/20 bg-[#10B981]/5 px-2 py-1 uppercase"
+                          >
+                            OPEN SOURCE <ExternalLink className="h-3 w-3 ml-0.5" />
+                          </a>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="6" className="py-4 text-center text-[#9CA3AF]">No dynamic evidence items audited for this record.</td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
-
         </div>
-
-      </div>
-    </div>
+      </>
+    )}
+  </div>
+</div>
   );
 };
 

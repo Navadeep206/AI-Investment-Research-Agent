@@ -102,7 +102,7 @@ export const runCommitteeAgent = async (
         reasoning: "Fallback: The final committee LLM node encountered an execution error and returned a safety Watch status.",
         keyFactors: ["LLM Generation Failure"],
         sourcesUsed: sourcesUsed,
-        evidenceQualityScore: evidenceMetrics ? evidenceMetrics.evidenceQualityScore : 50,
+        evidenceQualityScore: evidenceMetrics ? evidenceMetrics.evidenceQualityScore : 0,
         tierBreakdown: {
           tierA: evidenceMetrics ? (evidenceMetrics.tierA || 0) : 0,
           tierB: evidenceMetrics ? (evidenceMetrics.tierB || 0) : 0,
@@ -118,7 +118,9 @@ export const runCommitteeAgent = async (
   const failedNodesCount = Array.isArray(failedNodes) ? failedNodes.length : 0;
   const dataQualityScore = Math.max(0, 100 - (failedNodesCount * 20));
 
-  const evidenceQualityVal = evidenceMetrics ? Number(evidenceMetrics.evidenceQualityScore || 0) : 80;
+  // Use the score computed by the Evidence Quality Engine (sourceRankingService).
+  // If evidenceMetrics is null, no evidence was collected → score is 0.
+  const evidenceQualityVal = evidenceMetrics ? Number(evidenceMetrics.evidenceQualityScore || 0) : 0;
 
   // 2.1 Compute agent consensus metrics for telemetry breakdown
   let agentAgreementScore = 100;
@@ -155,6 +157,7 @@ export const runCommitteeAgent = async (
   decision.freshnessScore = 100; // Live at run time
   decision.evidenceAgeMinutes = 0; // Live at run time
 
+  console.log("Committee Agent Output Score", decision.evidenceQualityScore);
   return decision;
 };
 

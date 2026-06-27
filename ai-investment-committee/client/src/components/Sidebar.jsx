@@ -13,6 +13,7 @@ import {
   Briefcase
 } from 'lucide-react';
 import apiService from '../services/apiService';
+import logoSvg from '../assets/logo.svg';
 
 const Sidebar = () => {
   const [dbConnected, setDbConnected] = useState(true);
@@ -38,22 +39,25 @@ const Sidebar = () => {
   }, []);
 
   const navItems = [
-    { to: '/', label: 'DASHBOARD', icon: LayoutDashboard },
-    { to: '/analyze', label: 'ANALYZE', icon: Search },
-    { to: '/compare', label: 'COMPARE', icon: GitCompare },
-    { to: '/portfolio', label: 'PORTFOLIO', icon: Briefcase },
-    { to: '/history', label: 'HISTORY', icon: History },
-    { to: '/settings', label: 'SETTINGS', icon: Settings },
+    { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+    { to: '/analyze', label: 'Analyze', icon: Search },
+    { to: '/compare', label: 'Compare', icon: GitCompare },
+    { to: '/portfolio', label: 'Portfolio', icon: Briefcase },
+    { to: '/history', label: 'History', icon: History },
+    { to: '/settings', label: 'About', icon: Settings },
   ];
 
   return (
-    <aside className="w-64 h-full bg-[#0A0E17] border-r border-[#1F2937] flex flex-col font-mono text-xs select-none">
+    <aside className="w-64 h-full bg-[#0A0E17] border-r border-[#1F2937] flex flex-col font-sans text-xs select-none">
       {/* Brand Header */}
       <div className="p-6 border-b border-[#1F2937]">
         <div className="flex items-center space-x-2.5">
-          <div className="h-5 w-5 bg-[#10B981] flex items-center justify-center rounded-sm text-[#0A0E17] font-black text-[10px]">
-            AI
-          </div>
+          <img
+            src={logoSvg}
+            alt="INVEST.TERMINAL logo"
+            className="h-8 w-8 flex-shrink-0"
+            draggable={false}
+          />
           <div>
             <h1 className="text-sm font-bold text-white tracking-widest leading-none font-sans">
               INVEST.TERMINAL
@@ -96,7 +100,7 @@ const Sidebar = () => {
       </nav>
 
       {/* Telemetry Panel */}
-      <div className="p-4 border-t border-[#1F2937] bg-[#111827]/40 space-y-3.5 text-[#9CA3AF]">
+      <div className="p-4 border-t border-[#1F2937] bg-[#111827]/40 space-y-3.5 text-[#9CA3AF] font-mono">
         <div className="text-[10px] font-bold text-white tracking-wider pb-1.5 border-b border-[#1F2937]">
           SYSTEM TELEMETRY
         </div>

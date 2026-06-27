@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Search as SearchIcon, 
   RefreshCw, 
@@ -15,10 +15,12 @@ import {
   Database,
   Cpu,
   BadgeAlert,
-  ChevronDown
+  ChevronDown,
+  Sparkles
 } from 'lucide-react';
 import apiService from '../services/apiService';
 import AgentExecutionPanel from '../components/AgentExecutionPanel';
+import DecisionTimeline from '../components/DecisionTimeline';
 
 const Analyze = () => {
   const [query, setQuery] = useState('');
@@ -35,6 +37,18 @@ const Analyze = () => {
     devil: false,
     committee: false
   });
+  const [activeTab, setActiveTab] = useState('timeline');
+  const [isInputFocused, setIsInputFocused] = useState(false);
+  const blurTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (blurTimeoutRef.current) {
+        clearTimeout(blurTimeoutRef.current);
+      }
+    };
+  }, []);
+
 
   // Load recent searches on mount
   useEffect(() => {
@@ -107,6 +121,7 @@ const Analyze = () => {
 
       // Fetch the full PostgreSQL details using the analysisId
       const fullRecord = await apiService.getAnalysis(response.analysisId);
+      console.log("Analyze.jsx fullRecord:", fullRecord);
       setRecord(fullRecord);
       addRecentCompany(fullRecord.company);
 
@@ -165,14 +180,7 @@ const Analyze = () => {
     if (record?.research?.evidence && Array.isArray(record.research.evidence) && record.research.evidence.length > 0) {
       return record.research.evidence;
     }
-    // Realistic fallback items if the record was generated prior to evidence saving
-    return [
-      { source: 'SEC Edgar Database', tier: 'Tier A', confidence: 98, claim: `Form 10-K filing review for fiscal year reporting on ${record?.company} operational balance sheet variables.`, url: 'https://sec.gov' },
-      { source: 'Bloomberg Markets', tier: 'Tier A', confidence: 95, claim: `${record?.company} equity index multiple valuation tracking, consensus ratings, and institutional capital inflows.`, url: 'https://bloomberg.com' },
-      { source: 'Reuters Technology', tier: 'Tier A', confidence: 92, claim: `Industry sector growth catalysts and supply chain lead times associated with ${record?.company} business vectors.`, url: 'https://reuters.com' },
-      { source: 'Morningstar Vetting', tier: 'Tier B', confidence: 85, claim: `Benchmark capital expenditures allocations and debt leverage safety margins for ${record?.company}.`, url: 'https://morningstar.com' },
-      { source: 'Seeking Alpha Analysis', tier: 'Tier B', confidence: 80, claim: `Adversarial competitive advantages review against major industry sector peers.`, url: 'https://seekingalpha.com' }
-    ].slice(0, record?.sourcesUsed || 5);
+    return [];
   };
 
   // Dynamically resolve material events list
@@ -190,18 +198,18 @@ const Analyze = () => {
   });
 
   return (
-    <div className="bg-[#0A0E17] min-h-screen text-slate-100 p-6 sm:p-8 font-mono select-none">
+    <div className="bg-[#0A0E17] min-h-screen text-slate-100 p-6 sm:p-8 font-sans select-none">
       <div className="max-w-7xl mx-auto space-y-6">
         
         {/* Header Title */}
         <div className="sticky top-0 z-20 bg-[#0A0E17] pt-2 pb-6 border-b border-[#1F2937] flex flex-col sm:flex-row justify-between sm:items-end gap-4">
           <div>
-            <h1 className="text-xl font-bold tracking-widest text-white">ANALYZE COMPANY TERMINAL</h1>
-            <p className="text-xs text-[#9CA3AF] mt-1 font-sans">
+            <h1 className="text-[32px] font-semibold tracking-wide text-white leading-normal">Analyze Company Terminal</h1>
+            <p className="text-[15px] font-normal text-[#9CA3AF] mt-2 font-sans leading-[1.7]">
               Deploy a multi-agent LangGraph execution tracing pipeline to perform institutional security audits.
             </p>
           </div>
-          <div className="text-xs text-[#9CA3AF] bg-[#111827] border border-[#1F2937] px-3 py-1.5 flex items-center gap-2 select-none">
+          <div className="text-xs text-[#9CA3AF] bg-[#111827] border border-[#1F2937] px-3 py-1.5 flex items-center gap-2 select-none font-mono">
             <Clock className="h-3.5 w-3.5 text-[#10B981]" />
             <span>SYSTEM CLOCK: <strong className="text-white">{new Date().toLocaleTimeString()}</strong></span>
           </div>
@@ -210,61 +218,100 @@ const Analyze = () => {
         {/* Search Panel + Dropdown */}
         <div className="bg-[#111827] border border-[#1F2937] p-5 relative">
           <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
+            <div 
+              className="relative flex-1"
+              onMouseLeave={() => setShowRecentDropdown(false)}
+            >
               <SearchIcon className="absolute left-3.5 top-3 h-4.5 w-4.5 text-[#9CA3AF]" />
               <input
                 type="text"
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onFocus={() => setShowRecentDropdown(true)}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setShowRecentDropdown(true);
+                }}
+                onFocus={() => {
+                  if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+                  setIsInputFocused(true);
+                  setShowRecentDropdown(true);
+                }}
+                onBlur={() => {
+                  setIsInputFocused(false);
+                  blurTimeoutRef.current = setTimeout(() => {
+                    setShowRecentDropdown(false);
+                  }, 200);
+                }}
+                onClick={() => {
+                  if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+                  setShowRecentDropdown(true);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleAnalyze();
+                  else if (e.key === 'Escape') setShowRecentDropdown(false);
                 }}
-                placeholder="ENTER TICKER OR COMPANY NAME (e.g. NVIDIA, AAPL, MSFT)..."
+                placeholder="Enter ticker or company name (e.g. NVIDIA, AAPL, MSFT)..."
                 disabled={loading}
-                className="w-full bg-[#0A0E17] border border-[#1F2937] pl-11 pr-10 py-2.5 text-xs text-white placeholder-[#9CA3AF] focus:outline-none focus:border-[#10B981] font-bold"
+                className="w-full bg-[#0A0E17] border border-[#1F2937] pl-11 pr-10 py-2.5 text-xs text-white placeholder-[#9CA3AF] focus:outline-none focus:border-[#10B981] font-semibold font-sans rounded-none"
               />
               {recentCompanies.length > 0 && (
                 <button
-                  onClick={() => setShowRecentDropdown(!showRecentDropdown)}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setShowRecentDropdown(!showRecentDropdown);
+                  }}
                   className="absolute right-3 top-3.5"
                   title="Toggle recent search targets"
                 >
                   <ChevronDown className="h-4 w-4 text-[#9CA3AF] hover:text-white" />
                 </button>
               )}
+
+              {/* Recent Companies Dropdown Menu */}
+              {showRecentDropdown && !loading && recentCompanies.length > 0 && (
+                <div className={`absolute left-0 right-0 top-[42px] bg-[#0A0E17] border border-t-0 z-50 shadow-2xl transition-colors duration-150 ${isInputFocused ? 'border-[#10B981]' : 'border-[#1F2937]'}`}>
+                  <div className={`border-b px-3 py-2 text-[9px] font-bold flex items-center justify-between tracking-wider uppercase select-none transition-colors duration-150 ${isInputFocused ? 'border-[#10B981]/30 text-[#10B981]' : 'border-[#1F2937] text-[#9CA3AF]'}`}>
+                    <span className="flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5" />
+                      RECENT SEARCH HISTORY
+                    </span>
+                    <span className="text-[8px] font-mono opacity-80">AUDITED DATA</span>
+                  </div>
+                  <div className={`divide-y transition-colors duration-150 ${isInputFocused ? 'divide-[#10B981]/20' : 'divide-[#1F2937]/60'}`}>
+                    {recentCompanies.map((c, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          handleAnalyze(c);
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-xs text-white hover:bg-[#10B981]/5 transition-all flex justify-between items-center group cursor-pointer"
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <Clock className="h-3.5 w-3.5 text-[#9CA3AF] group-hover:text-[#10B981] transition-colors" />
+                          <strong className="group-hover:text-[#10B981] transition-colors font-mono tracking-wide">{c}</strong>
+                        </span>
+                        <span className="text-[8px] border border-[#10B981]/30 bg-[#10B981]/5 px-2 py-0.5 tracking-widest text-[#10B981] font-mono font-bold uppercase transition-all group-hover:bg-[#10B981]/15 group-hover:border-[#10B981]/50">
+                          CACHED
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             
             <button
+              type="button"
               onClick={() => handleAnalyze()}
               disabled={loading || !query.trim()}
-              className="bg-[#10B981] text-[#0A0E17] font-bold text-xs px-8 py-2.5 hover:brightness-110 transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
+              className="bg-[#10B981] text-[#0A0E17] font-semibold text-xs px-8 py-2.5 hover:brightness-110 transition-all duration-150 flex items-center justify-center space-x-2 disabled:opacity-50 rounded-none cursor-pointer"
             >
               {loading && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
-              <span>{loading ? 'ANALYZING...' : 'RUN PIPELINE'}</span>
+              <span>{loading ? 'Analyzing...' : 'Run Pipeline'}</span>
             </button>
           </div>
-
-          {/* Recent Companies Dropdown Menu */}
-          {showRecentDropdown && recentCompanies.length > 0 && (
-            <div className="absolute left-5 right-5 sm:left-5 sm:w-80 top-18 bg-[#111827] border border-[#1F2937] z-50 shadow-2xl">
-              <div className="border-b border-[#1F2937] px-3 py-2 text-[9px] text-[#9CA3AF] font-bold">
-                RECENT ANALYSIS HISTORY
-              </div>
-              <div className="divide-y divide-[#1F2937]/60">
-                {recentCompanies.map((c, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleAnalyze(c)}
-                    className="w-full text-left px-4 py-2.5 text-xs text-white hover:bg-[#0A0E17] hover:text-[#10B981] transition-all flex justify-between items-center"
-                  >
-                    <span>{c}</span>
-                    <span className="text-[9px] text-[#9CA3AF] font-sans">LOAD CACHE</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Error notification */}
@@ -284,8 +331,8 @@ const Analyze = () => {
             <div className="bg-[#111827] border border-[#1F2937] p-5 flex items-center space-x-4">
               <RefreshCw className="h-5 w-5 text-[#3B82F6] animate-spin" />
               <div>
-                <h3 className="text-xs font-bold text-white tracking-widest">WORKFLOW EXECUTING...</h3>
-                <p className="text-[9px] text-[#9CA3AF] mt-0.5">Please wait. Long-running analytical models are fetching fresh market updates.</p>
+                <h3 className="text-[20px] font-semibold text-white tracking-normal">Workflow Executing...</h3>
+                <p className="text-xs text-[#9CA3AF] mt-0.5 font-sans">Please wait. Long-running analytical models are fetching fresh market updates.</p>
               </div>
             </div>
             <AgentExecutionPanel agents={executionData} />
@@ -295,63 +342,127 @@ const Analyze = () => {
         {/* 2. Analysis Results Report Screen */}
         {record && !loading && (
           <div className="space-y-6">
-            
-            {/* VETTING TERMINAL HEADER PROFILE */}
-            <div className="bg-[#111827] border border-[#1F2937] p-5">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                
-                {/* Meta details */}
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[9px] bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30 px-2.5 py-0.5 font-bold uppercase">
-                      {cacheMeta?.dataSource === 'CACHE' 
-                        ? 'CACHE HIT' 
-                        : cacheMeta?.dataSource === 'EVENT_REFRESH' 
-                          ? 'EVENT REFRESH' 
-                          : 'FRESH PIPELINE RUN'}
-                    </span>
-                    <span className={`text-[9px] border px-2.5 py-0.5 font-bold uppercase ${
-                      record.freshnessStatus === 'LIVE' ? 'text-emerald-400 border-emerald-500/30 bg-emerald-950/10' :
-                      record.freshnessStatus === 'FRESH' ? 'text-blue-400 border-blue-500/30 bg-blue-950/10' :
-                      record.freshnessStatus === 'RECENT' ? 'text-amber-400 border-amber-500/30 bg-amber-950/10' :
-                      'text-red-400 border-red-500/30 bg-red-950/10'
-                    }`}>
-                      {record.freshnessStatus || 'LIVE'}
-                    </span>
-                  </div>
-                  <h2 className="text-2xl font-black text-white tracking-widest">{record.company.toUpperCase()}</h2>
-                  <div className="text-xs text-[#9CA3AF] flex flex-wrap gap-x-6 gap-y-1 font-sans">
-                    <span>INDUSTRY: <strong className="text-white font-mono">{record.industry || 'N/A'}</strong></span>
-                    <span>MARKET CAP: <strong className="text-white font-mono">{record.marketCap || 'N/A'}</strong></span>
+            {/* View Toggle Tabs */}
+            <div className="flex border-b border-[#1F2937] gap-2 mb-4">
+              <button
+                type="button"
+                onClick={() => setActiveTab('timeline')}
+                className={`px-4 py-2 border-t-2 text-[10px] font-semibold tracking-wider transition-all duration-150 uppercase cursor-pointer rounded-none ${
+                  activeTab === 'timeline'
+                    ? 'border-[#10B981] bg-[#111827] text-white'
+                    : 'border-transparent text-[#9CA3AF] hover:text-white hover:bg-[#111827]/40'
+                }`}
+              >
+                AI Decision Timeline
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('dashboard')}
+                className={`px-4 py-2 border-t-2 text-[10px] font-semibold tracking-wider transition-all duration-150 uppercase cursor-pointer rounded-none ${
+                  activeTab === 'dashboard'
+                    ? 'border-[#10B981] bg-[#111827] text-white'
+                    : 'border-transparent text-[#9CA3AF] hover:text-white hover:bg-[#111827]/40'
+                }`}
+              >
+                Executive Dashboard
+              </button>
+            </div>
+
+            {activeTab === 'timeline' ? (
+              <DecisionTimeline record={record} />
+            ) : (
+              <>
+                {/* VETTING TERMINAL HEADER PROFILE */}
+                <div className="bg-[#111827] border border-[#1F2937] p-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[9px] bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30 px-2.5 py-0.5 font-bold uppercase">
+                          {cacheMeta?.dataSource === 'CACHE' 
+                            ? 'CACHE HIT' 
+                            : cacheMeta?.dataSource === 'EVENT_REFRESH' 
+                              ? 'EVENT REFRESH' 
+                              : 'FRESH PIPELINE RUN'}
+                        </span>
+                        <span className={`text-[9px] border px-2.5 py-0.5 font-bold uppercase ${
+                          record.freshnessStatus === 'LIVE' ? 'text-emerald-400 border-emerald-500/30 bg-emerald-950/10' :
+                          record.freshnessStatus === 'FRESH' ? 'text-blue-400 border-blue-500/30 bg-blue-950/10' :
+                          record.freshnessStatus === 'RECENT' ? 'text-amber-400 border-emerald-500/30 bg-amber-950/10' :
+                          'text-red-400 border-red-500/30 bg-red-950/10'
+                        }`}>
+                          {record.freshnessStatus || 'LIVE'}
+                        </span>
+                      </div>
+                      <h2 className="text-2xl font-semibold text-white tracking-wide">{record.company}</h2>
+                      <div className="text-xs text-[#9CA3AF] flex flex-wrap gap-x-6 gap-y-1 font-sans">
+                        <span>INDUSTRY: <strong className="text-white font-mono">{record.industry || 'N/A'}</strong></span>
+                        <span>MARKET CAP: <strong className="text-white font-mono">{record.marketCap || 'N/A'}</strong></span>
+                      </div>
+                    </div>
+                    
+                    <div className="text-right text-[10px] text-[#9CA3AF] font-mono leading-relaxed">
+                      <div>ANALYSIS ID: <span className="text-slate-300">{record.id}</span></div>
+                      <div>TIMESTAMP: <span className="text-slate-300">{new Date(record.createdAt).toLocaleString()}</span></div>
+                    </div>
                   </div>
                 </div>
 
-                {/* Primary Stats Header Row */}
-                <div className="flex flex-wrap gap-3">
-                  <div className="border border-[#1F2937] bg-[#0A0E17] px-4 py-2.5 flex flex-col justify-between h-14 min-w-[100px]">
-                    <span className="text-[7.5px] font-bold text-[#9CA3AF] tracking-wider uppercase leading-none">RECOMMENDATION</span>
-                    <span className={`text-xs font-bold leading-none mt-1 border px-1.5 py-0.5 inline-block text-center ${getRecColor(record.recommendation)}`}>
-                      {record.recommendation || 'WATCH'}
-                    </span>
-                  </div>
-                  <div className="border border-[#1F2937] bg-[#0A0E17] px-4 py-2.5 flex flex-col justify-between h-14 min-w-[100px]">
-                    <span className="text-[7.5px] font-bold text-[#9CA3AF] tracking-wider uppercase leading-none">CONFIDENCE</span>
-                    <span className="text-lg font-bold text-white leading-none mt-1">{record.confidence ?? 0}%</span>
-                  </div>
-                  <div className="border border-[#1F2937] bg-[#0A0E17] px-4 py-2.5 flex flex-col justify-between h-14 min-w-[100px]">
-                    <span className="text-[7.5px] font-bold text-[#9CA3AF] tracking-wider uppercase leading-none">EVIDENCE QUALITY</span>
-                    <span className="text-lg font-bold text-white leading-none mt-1">{record.evidenceQualityScore ?? 0}%</span>
+                {/* CORE COMMITTEE TELEMETRY GRID (Requirement 6) */}
+                <div className="bg-[#111827] border border-[#1F2937] p-5 space-y-4">
+                  <h3 className="text-[20px] font-semibold text-white tracking-normal flex items-center gap-1.5 border-b border-[#1F2937] pb-3">
+                    <Sparkles className="h-4 w-4 text-[#10B981]" />
+                    Committee Verdict & Core Telemetry
+                  </h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 font-mono">
+                    <div className="border border-[#1F2937] bg-[#0A0E17] p-4 flex flex-col justify-between h-24">
+                      <span className="text-[9px] font-medium text-[#9CA3AF] tracking-wider uppercase font-sans">Overall Score</span>
+                      <strong className="text-2xl font-semibold text-white leading-none font-mono">{record.overallScore ?? record.scorecard?.overallScore ?? 'N/A'}/100</strong>
+                    </div>
+
+                    <div className="border border-[#1F2937] bg-[#0A0E17] p-4 flex flex-col justify-between h-24">
+                      <span className="text-[9px] font-medium text-[#9CA3AF] tracking-wider uppercase font-sans">Business Quality</span>
+                      <strong className="text-2xl font-semibold text-white leading-none font-mono">{record.scorecard?.businessQuality ?? 'N/A'}/100</strong>
+                    </div>
+
+                    <div className="border border-[#1F2937] bg-[#0A0E17] p-4 flex flex-col justify-between h-24">
+                      <span className="text-[9px] font-medium text-[#9CA3AF] tracking-wider uppercase font-sans">Risk Level</span>
+                      <strong className={`text-2xl font-semibold leading-none font-mono ${
+                        (record.scorecard?.riskLevel ?? 0) <= 35 ? 'text-[#10B981]' : 
+                        (record.scorecard?.riskLevel ?? 0) <= 65 ? 'text-[#F59E0B]' : 'text-[#EF4444]'
+                      }`}>{record.scorecard?.riskLevel ?? 'N/A'}/100</strong>
+                    </div>
+
+                    <div className="border border-[#1F2937] bg-[#0A0E17] p-4 flex flex-col justify-between h-24">
+                      <span className="text-[9px] font-medium text-[#9CA3AF] tracking-wider uppercase font-sans">Evidence Quality</span>
+                      <strong className="text-2xl font-semibold text-[#10B981] leading-none font-mono">
+                        {record.evidenceQualityScore != null
+                          ? `${record.evidenceQualityScore}/100`
+                          : record.finalDecision?.evidenceQualityScore != null
+                            ? `${record.finalDecision.evidenceQualityScore}/100`
+                            : 'N/A'}
+                      </strong>
+                    </div>
+
+                    <div className="border border-[#1F2937] bg-[#0A0E17] p-4 flex flex-col justify-between h-24">
+                      <span className="text-[9px] font-medium text-[#9CA3AF] tracking-wider uppercase font-sans">Confidence</span>
+                      <strong className="text-2xl font-semibold text-white leading-none font-mono">{record.confidence ?? 0}%</strong>
+                    </div>
+
+                    <div className="border border-[#1F2937] bg-[#0A0E17] p-4 flex flex-col justify-between h-24">
+                      <span className="text-[9px] font-medium text-[#9CA3AF] tracking-wider uppercase font-sans">Recommendation</span>
+                      <span className={`text-xs font-bold py-1 border inline-block text-center mt-1 uppercase font-mono ${getRecColor(record.recommendation)}`}>
+                        {record.recommendation || 'WATCH'}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
 
             {/* SCORECARD GRID */}
             <div className="bg-[#111827] border border-[#1F2937] p-5 space-y-4">
               <div className="flex items-center justify-between border-b border-[#1F2937] pb-2">
-                <h3 className="text-xs font-bold text-white tracking-widest flex items-center gap-1.5">
+                <h3 className="text-[20px] font-semibold text-white tracking-normal flex items-center gap-1.5 pb-1">
                   <Layers className="h-4 w-4 text-[#10B981]" />
-                  INVESTMENT SCORECARD TELEMETRY
+                  Investment Scorecard Telemetry
                 </h3>
               </div>
               
@@ -376,8 +487,8 @@ const Analyze = () => {
 
                   return (
                     <div key={idx} className={`border p-3.5 flex flex-col justify-between h-22 ${colorClass}`}>
-                      <span className="text-[7.5px] font-bold text-[#9CA3AF] tracking-wider uppercase leading-snug">{item.name}</span>
-                      <span className="text-2xl font-black leading-none">{item.value ?? 'N/A'}</span>
+                      <span className="text-[7.5px] font-medium text-[#9CA3AF] tracking-wider uppercase leading-snug font-sans">{item.name}</span>
+                      <span className="text-2xl font-semibold leading-none font-mono">{item.value ?? 'N/A'}</span>
                     </div>
                   );
                 })}
@@ -386,9 +497,9 @@ const Analyze = () => {
 
             {/* AI COMMITTEE ROOM */}
             <div className="space-y-3">
-              <h3 className="text-xs font-bold text-[#10B981] tracking-widest uppercase flex items-center gap-1.5">
+              <h3 className="text-[20px] font-semibold text-[#10B981] tracking-normal flex items-center gap-1.5 pb-1">
                 <Cpu className="h-4 w-4 text-[#10B981]" />
-                AI COMMITTEE ROOM REPORTS
+                AI Committee Room Reports
               </h3>
               
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -396,16 +507,17 @@ const Analyze = () => {
                 {/* Research Agent */}
                 <div className="bg-[#111827] border border-[#1F2937] p-5 flex flex-col justify-between space-y-4">
                   <div className="space-y-3">
-                    <h4 className="text-[10px] font-bold text-white tracking-widest border-b border-[#1F2937] pb-1.5 flex items-center justify-between gap-1.5">
+                    <h4 className="text-[18px] font-semibold text-white tracking-wide border-b border-[#1F2937] pb-1.5 flex items-center justify-between gap-1.5 font-sans">
                       <span className="flex items-center gap-1.5">
-                        <FileText className="h-3.5 w-3.5 text-[#3B82F6]" />
-                        RESEARCH AGENT
+                        <FileText className="h-4 w-4 text-[#3B82F6] flex-shrink-0" />
+                        Research Agent
                       </span>
                       <button 
+                        type="button"
                         onClick={() => setExpandedAgents(prev => ({ ...prev, research: !prev.research }))}
-                        className="text-[8px] text-[#3B82F6] hover:underline cursor-pointer uppercase font-bold"
+                        className="w-[84px] py-1 border border-[#3B82F6]/30 hover:border-[#3B82F6] hover:bg-[#3B82F6]/5 text-[#3B82F6] text-center text-[8px] font-mono tracking-wider font-bold transition-all duration-150 rounded-none cursor-pointer flex-shrink-0"
                       >
-                        {expandedAgents.research ? '[ COLLAPSE ]' : '[ ELABORATE ]'}
+                        {expandedAgents.research ? 'COLLAPSE ▲' : 'EXPAND ▼'}
                       </button>
                     </h4>
                     <div className="space-y-2">
@@ -477,16 +589,17 @@ const Analyze = () => {
                 {/* Devil's Advocate */}
                 <div className="bg-[#111827] border border-[#1F2937] p-5 flex flex-col justify-between space-y-4">
                   <div className="space-y-3">
-                    <h4 className="text-[10px] font-bold text-white tracking-widest border-b border-[#1F2937] pb-1.5 flex items-center justify-between gap-1.5">
+                    <h4 className="text-[18px] font-semibold text-[#EF4444] tracking-wide border-b border-[#1F2937] pb-1.5 flex items-center justify-between gap-1.5 font-sans">
                       <span className="flex items-center gap-1.5">
-                        <ShieldAlert className="h-3.5 w-3.5 text-[#EF4444]" />
-                        DEVIL'S ADVOCATE
+                        <ShieldAlert className="h-4 w-4 text-[#EF4444] flex-shrink-0" />
+                        Devil's Advocate
                       </span>
                       <button 
+                        type="button"
                         onClick={() => setExpandedAgents(prev => ({ ...prev, devil: !prev.devil }))}
-                        className="text-[8px] text-[#EF4444] hover:underline cursor-pointer uppercase font-bold"
+                        className="w-[84px] py-1 border border-[#EF4444]/30 hover:border-[#EF4444] hover:bg-[#EF4444]/5 text-[#EF4444] text-center text-[8px] font-mono tracking-wider font-bold transition-all duration-150 rounded-none cursor-pointer flex-shrink-0"
                       >
-                        {expandedAgents.devil ? '[ COLLAPSE ]' : '[ ELABORATE ]'}
+                        {expandedAgents.devil ? 'COLLAPSE ▲' : 'EXPAND ▼'}
                       </button>
                     </h4>
                     <div className="space-y-2">
@@ -519,16 +632,17 @@ const Analyze = () => {
                 {/* Committee Decision */}
                 <div className="bg-[#111827] border border-[#1F2937] p-5 flex flex-col justify-between space-y-4">
                   <div className="space-y-3">
-                    <h4 className="text-[10px] font-bold text-white tracking-widest border-b border-[#1F2937] pb-1.5 flex items-center justify-between gap-1.5">
+                    <h4 className="text-[18px] font-semibold text-amber-500 tracking-wide border-b border-[#1F2937] pb-1.5 flex items-center justify-between gap-1.5 font-sans">
                       <span className="flex items-center gap-1.5">
-                        <Award className="h-3.5 w-3.5 text-amber-500" />
-                        COMMITTEE MEMO
+                        <Award className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                        Committee Memo
                       </span>
                       <button 
+                        type="button"
                         onClick={() => setExpandedAgents(prev => ({ ...prev, committee: !prev.committee }))}
-                        className="text-[8px] text-amber-500 hover:underline cursor-pointer uppercase font-bold"
+                        className="w-[84px] py-1 border border-amber-500/30 hover:border-amber-500 hover:bg-amber-500/5 text-amber-500 text-center text-[8px] font-mono tracking-wider font-bold transition-all duration-150 rounded-none cursor-pointer flex-shrink-0"
                       >
-                        {expandedAgents.committee ? '[ COLLAPSE ]' : '[ ELABORATE ]'}
+                        {expandedAgents.committee ? 'COLLAPSE ▲' : 'EXPAND ▼'}
                       </button>
                     </h4>
                     <div className="space-y-2 text-[#9CA3AF]">
@@ -554,7 +668,7 @@ const Analyze = () => {
                     </div>
                     <div className="text-right">
                       <div className="text-[8px] text-[#9CA3AF] uppercase font-bold">CONVICTION</div>
-                      <div className="text-xs text-white font-bold mt-1">{record.confidence}%</div>
+                      <div className="text-xs text-white font-semibold font-mono mt-1">{record.confidence}%</div>
                     </div>
                   </div>
                 </div>
@@ -568,18 +682,19 @@ const Analyze = () => {
               {/* Evidence Ledger */}
               <div className="bg-[#111827] border border-[#1F2937] p-5 lg:col-span-3 space-y-4">
                 <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-[#1F2937] pb-3">
-                  <h3 className="text-xs font-bold text-white tracking-widest flex items-center gap-1.5">
+                  <h3 className="text-[20px] font-semibold text-white tracking-normal flex items-center gap-1.5 pb-1">
                     <Database className="h-4 w-4 text-[#10B981]" />
-                    EVIDENCE LEDGER TERMINAL
+                    Evidence Ledger Terminal
                   </h3>
                   
                   {/* Tier filters */}
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 font-sans">
                     {['ALL', 'TIER A', 'TIER B', 'TIER C'].map((tier, idx) => (
                       <button
+                        type="button"
                         key={idx}
                         onClick={() => setEvidenceFilter(tier)}
-                        className={`text-[8.5px] font-bold px-2 py-0.5 border ${
+                        className={`text-[8.5px] font-semibold px-2 py-0.5 border rounded-none transition-all duration-150 cursor-pointer ${
                           evidenceFilter === tier 
                             ? 'bg-[#10B981] text-[#0A0E17] border-[#10B981]' 
                             : 'bg-transparent text-[#9CA3AF] border-[#1F2937] hover:border-[#10B981]'
@@ -599,38 +714,42 @@ const Analyze = () => {
                         <th className="py-2 font-bold">TIER</th>
                         <th className="py-2 font-bold text-center">CONF.</th>
                         <th className="py-2 font-bold">CLAIM SUMMARY</th>
-                        <th className="py-2 font-bold text-right">URL</th>
+                        <th className="py-2 font-bold">PUBLISHED TIME</th>
+                        <th className="py-2 font-bold text-right">ACTION</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#1F2937]/50">
                       {filteredEvidence.length > 0 ? (
                         filteredEvidence.map((item, idx) => (
-                          <tr key={idx} className="hover:bg-[#1F2937]/30">
-                            <td className="py-2 font-bold text-white">{item.source}</td>
+                          <tr key={idx} className="hover:bg-[#1F2937]/30 text-slate-300">
+                            <td className="py-2 font-bold text-white max-w-[120px] truncate">{item.source}</td>
                             <td className="py-2">
                               <span className={`px-1.5 py-0.25 border text-[7.5px] font-bold ${getEvidenceTierColor(item.tier)}`}>
                                 {item.tier || 'Tier C'}
                               </span>
                             </td>
-                            <td className="py-2 text-center text-slate-300 font-bold">{item.confidence}%</td>
-                            <td className="py-2 text-[#9CA3AF] truncate max-w-[200px]" title={item.claim}>
+                            <td className="py-2 text-center text-slate-200 font-semibold font-mono">{item.confidence}%</td>
+                            <td className="py-2 max-w-[200px] break-words whitespace-pre-wrap" title={item.claim}>
                               {item.claim}
+                            </td>
+                            <td className="py-2 text-[#9CA3AF] font-mono text-[10px] whitespace-nowrap">
+                              {item.publishedTime || item.publishedDate || 'N/A'}
                             </td>
                             <td className="py-2 text-right">
                               <a 
                                 href={item.url} 
                                 target="_blank" 
                                 rel="noreferrer" 
-                                className="inline-flex items-center text-[#10B981] hover:underline text-[10px]"
+                                className="inline-flex items-center text-[#10B981] hover:bg-[#10B981]/10 text-[9.5px] font-semibold border border-[#10B981]/20 bg-[#10B981]/5 px-2 py-1 uppercase rounded-none transition-all duration-150 cursor-pointer font-sans"
                               >
-                                LINK <ExternalLink className="h-3 w-3 ml-0.5" />
+                                Open Source <ExternalLink className="h-3 w-3 ml-0.5" />
                               </a>
                             </td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan="5" className="py-4 text-center text-[#9CA3AF]">No sources match the selected filter.</td>
+                          <td colSpan="6" className="py-4 text-center text-[#9CA3AF]">No sources match the selected filter.</td>
                         </tr>
                       )}
                     </tbody>
@@ -640,9 +759,9 @@ const Analyze = () => {
 
               {/* Material Events Panel */}
               <div className="bg-[#111827] border border-[#1F2937] p-5 lg:col-span-2 space-y-4">
-                <h3 className="text-xs font-bold text-white tracking-widest border-b border-[#1F2937] pb-3 flex items-center gap-1.5">
+                <h3 className="text-[20px] font-semibold text-white tracking-normal flex items-center gap-1.5 border-b border-[#1F2937] pb-3">
                   <Activity className="h-4 w-4 text-[#10B981]" />
-                  DETECTED MATERIAL EVENTS
+                  Detected Material Events
                 </h3>
 
                 <div className="overflow-y-auto max-h-[220px] pr-1 space-y-3">
@@ -666,7 +785,7 @@ const Analyze = () => {
                   ) : (
                     <div className="flex flex-col items-center justify-center text-center h-[180px] border border-[#1F2937]/50 bg-[#0A0E17]/10 p-4">
                       <CheckCircle className="h-6 w-6 text-[#10B981] mb-2" />
-                      <span className="text-xs text-white font-bold">ALL CLEAR</span>
+                      <span className="text-xs text-white font-semibold uppercase">All Clear</span>
                       <p className="text-[10px] text-[#9CA3AF] mt-1 font-sans leading-relaxed">
                         No recent material events, guidance shifts, or leadership changes detected for this asset.
                       </p>
@@ -682,9 +801,9 @@ const Analyze = () => {
               
               {/* Decision Audit Panel */}
               <div className="bg-[#111827] border border-[#1F2937] p-5 space-y-4">
-                <h3 className="text-xs font-bold text-white tracking-widest border-b border-[#1F2937] pb-3 flex items-center gap-1.5">
+                <h3 className="text-[20px] font-semibold text-white tracking-normal border-b border-[#1F2937] pb-3 flex items-center gap-1.5">
                   <BadgeAlert className="h-4 w-4 text-[#10B981]" />
-                  DECISION AUDIT & REASON CODES
+                  Decision Audit & Reason Codes
                 </h3>
 
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -725,19 +844,19 @@ const Analyze = () => {
                       <div className="space-y-2">
                         <div className="flex justify-between text-[11px] text-[#9CA3AF]">
                           <span>Evidence Quality (40%):</span>
-                          <span className="text-white font-bold">{record.confidenceBreakdown.evidenceQuality || 0}%</span>
+                          <span className="text-white font-semibold font-mono">{record.confidenceBreakdown.evidenceQuality || 0}%</span>
                         </div>
                         <div className="flex justify-between text-[11px] text-[#9CA3AF]">
                           <span>Data Quality (30%):</span>
-                          <span className="text-white font-bold">{record.confidenceBreakdown.dataQuality || 0}%</span>
+                          <span className="text-white font-semibold font-mono">{record.confidenceBreakdown.dataQuality || 0}%</span>
                         </div>
                         <div className="flex justify-between text-[11px] text-[#9CA3AF]">
                           <span>Agent Agreement (30%):</span>
-                          <span className="text-white font-bold">{record.confidenceBreakdown.agentAgreement || 0}%</span>
+                          <span className="text-white font-semibold font-mono">{record.confidenceBreakdown.agentAgreement || 0}%</span>
                         </div>
                         <div className="border-t border-[#1F2937] pt-1.5 flex justify-between text-[11px] font-bold text-[#10B981]">
                           <span>Calculated Conviction:</span>
-                          <span>{record.confidence || 0}%</span>
+                          <span className="font-mono">{record.confidence || 0}%</span>
                         </div>
                       </div>
                     ) : (
@@ -751,16 +870,16 @@ const Analyze = () => {
 
               {/* Cache Metadata Panel */}
               <div className="bg-[#111827] border border-[#1F2937] p-5 space-y-4">
-                <h3 className="text-xs font-bold text-white tracking-widest border-b border-[#1F2937] pb-3 flex items-center gap-1.5">
+                <h3 className="text-[20px] font-semibold text-white tracking-normal border-b border-[#1F2937] pb-3 flex items-center gap-1.5">
                   <Database className="h-4 w-4 text-[#10B981]" />
-                  CACHE METADATA & TELEMETRY CONSOLE
+                  Cache Metadata & Telemetry Console
                 </h3>
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2.5">
                     <div className="flex justify-between text-[11px] text-[#9CA3AF] border-b border-[#1F2937]/45 pb-1">
                       <span>Data Source:</span>
-                      <span className="text-[#3B82F6] font-bold">{cacheMeta?.dataSource || 'FRESH_RUN'}</span>
+                      <span className="text-[#3B82F6] font-bold font-mono">{cacheMeta?.dataSource || 'FRESH_RUN'}</span>
                     </div>
                     <div className="flex justify-between text-[11px] text-[#9CA3AF] border-b border-[#1F2937]/45 pb-1 font-sans">
                       <span>Cache Status Detail:</span>
@@ -768,18 +887,18 @@ const Analyze = () => {
                     </div>
                     <div className="flex justify-between text-[11px] text-[#9CA3AF] border-b border-[#1F2937]/45 pb-1">
                       <span>Freshness Score:</span>
-                      <span className="text-white font-bold">{record.freshnessScore ?? 100}/100</span>
+                      <span className="text-white font-semibold font-mono">{record.freshnessScore ?? 100}/100</span>
                     </div>
                     <div className="flex justify-between text-[11px] text-[#9CA3AF] border-b border-[#1F2937]/45 pb-1">
                       <span>Evidence Age:</span>
-                      <span className="text-white font-bold">{record.evidenceAgeMinutes ?? 0}m</span>
+                      <span className="text-white font-semibold font-mono">{record.evidenceAgeMinutes ?? 0}m</span>
                     </div>
                   </div>
 
                   <div className="border border-[#1F2937] bg-[#0A0E17]/40 p-4 flex flex-col justify-between text-[10px] text-[#9CA3AF] font-mono leading-relaxed space-y-2">
                     <div>
                       <span className="text-[8px] text-[#9CA3AF] font-bold uppercase block border-b border-[#1F2937] pb-1">
-                        TRACING CONSOLE LOGS
+                        Tracing Console Logs
                       </span>
                       <div className="mt-2 font-mono text-[9px] text-slate-300 select-all">
                         REQUEST ID: {cacheMeta?.requestId || record.requestId || 'N/A'}
@@ -796,9 +915,10 @@ const Analyze = () => {
               </div>
 
             </div>
-
-          </div>
+          </>
         )}
+      </div>
+    )}
 
       </div>
     </div>

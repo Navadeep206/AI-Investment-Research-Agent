@@ -42,6 +42,7 @@ export const getAnalysis = async (req, res, next) => {
       });
     }
 
+    console.log("History Controller Output Score", record.evidenceQualityScore);
     return res.status(200).json({
       success: true,
       analysis: record
